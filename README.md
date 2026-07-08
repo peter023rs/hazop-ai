@@ -31,9 +31,13 @@ hazop-ai/
 
 ## Install
 
+Requires **Python 3.10+** (macOS's system `/usr/bin/python3` is 3.9 and its
+bundled pip fails on this project's editable install — use a newer Python,
+e.g. `brew install python@3.12`, or skip straight to Docker below).
+
 ```bash
 cd hazop-ai
-python -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e .            # core (flask, networkx, pymupdf)
 pip install -e ".[neo4j,llm,dexpi,dev]"   # optional extras + pytest
 ```
