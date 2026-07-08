@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t hazop-ai .
+      - name: Smoke-test dashboard
+        run: |
+          docker run -d -p 8780:8780 --name web hazop-ai
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8780/api/overview > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:8780/api/overview | head -c 300
+          docker logs web
