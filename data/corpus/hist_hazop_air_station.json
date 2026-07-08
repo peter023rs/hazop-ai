@@ -1,0 +1,45 @@
+{
+  "doc_id": "HIST-HAZOP-2019-AIR",
+  "source_type": "historical_hazop",
+  "title": "Historical HAZOP — instrument/plant air compression station (2019)",
+  "date": "2019-11-20",
+  "curation": "approved",
+  "curator": "pqiu",
+  "confidentiality": "internal",
+  "applicability": {
+    "unit_types": ["air_station", "utilities"],
+    "equipment_classes": ["compressor", "vessel", "dryer"]
+  },
+  "chunks": [
+    {
+      "chunk_id": "n2-blocked-discharge",
+      "text": "Air compressor discharge blocked by inadvertently closed manual valve during standby swap; interstage pressure rose to relief set point and the PSV lifted. Recommendation: car-seal open discharge block valves, add discharge pressure high alarm.",
+      "guidewords": ["MORE"],
+      "parameters": ["pressure"]
+    },
+    {
+      "chunk_id": "n3-cooling-loss",
+      "text": "Loss of cooling water to the aftercooler caused high compressor discharge temperature and trip; repeated events traced to fouled cooler tubes. Consequence: hot air to downstream dryer, desiccant damage. Safeguard: discharge temperature high alarm and trip TAH/TSH.",
+      "guidewords": ["MORE"],
+      "parameters": ["temperature"]
+    },
+    {
+      "chunk_id": "n4-receiver-overpressure",
+      "text": "Air receiver overpressure scenario: pressure controller failure combined with low plant air demand. Receiver protected by spring-loaded PSV sized for full compressor capacity. Verify PSV set pressure does not exceed vessel design pressure.",
+      "guidewords": ["MORE"],
+      "parameters": ["pressure"]
+    },
+    {
+      "chunk_id": "n5-moisture-carryover",
+      "text": "Failure to switch dryer towers on schedule led to moisture carryover into the instrument air header; multiple control valves hunting. Cause: dryer sequence controller fault. Safeguard: dew point analyzer with alarm on dryer outlet.",
+      "guidewords": ["AS WELL AS", "OTHER THAN"],
+      "parameters": ["composition"]
+    },
+    {
+      "chunk_id": "n6-no-flow-ia",
+      "text": "Total loss of instrument air (no flow in IA header) on simultaneous trip of running and standby compressors during power dip; air receivers provided approximately 8 minutes holdup for safe shutdown. Consequence: plant-wide fail-safe valve action.",
+      "guidewords": ["NO"],
+      "parameters": ["flow"]
+    }
+  ]
+}

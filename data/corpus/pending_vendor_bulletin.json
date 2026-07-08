@@ -1,0 +1,17 @@
+{
+  "doc_id": "VENDOR-BULLETIN-77",
+  "source_type": "incident",
+  "title": "Vendor reliability bulletin — awaiting curator review",
+  "date": "2026-06-30",
+  "curation": "pending",
+  "confidentiality": "internal",
+  "applicability": {},
+  "chunks": [
+    {
+      "chunk_id": "b1",
+      "text": "Unreviewed vendor claim about valve failure rates. This text must never appear in retrieval results until a curator approves the document (FR-AGM-2).",
+      "guidewords": ["MORE"],
+      "parameters": ["pressure"]
+    }
+  ]
+}

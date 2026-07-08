@@ -1,0 +1,93 @@
+{
+ "doc_id": "STD-IEC61882",
+ "source_type": "standard",
+ "title": "IEC 61882 guideword interpretation tables (excerpt)",
+ "date": "2016-03-01",
+ "curation": "approved",
+ "curator": "pqiu",
+ "confidentiality": "public",
+ "applicability": {},
+ "chunks": [
+  {
+   "chunk_id": "more-pressure",
+   "text": "More Pressure: common causes include blocked or restricted outlet, closed discharge valve with machine running, excess heat input, thermal expansion of blocked-in liquid, failure of pressure control.",
+   "guidewords": [
+    "MORE"
+   ],
+   "parameters": [
+    "pressure"
+   ]
+  },
+  {
+   "chunk_id": "no-flow",
+   "text": "No Flow: common causes include pump or compressor trip, suction valve closed, line blockage, upstream supply loss, control valve fails closed.",
+   "guidewords": [
+    "NO"
+   ],
+   "parameters": [
+    "flow"
+   ]
+  },
+  {
+   "chunk_id": "less-flow",
+   "text": "Less Flow: partial blockage, fouling, filter plugging, valve partially closed, machine running below capacity, leakage to atmosphere.",
+   "guidewords": [
+    "LESS"
+   ],
+   "parameters": [
+    "flow"
+   ]
+  },
+  {
+   "chunk_id": "reverse-flow",
+   "text": "Reverse Flow: occurs when downstream pressure exceeds upstream on machine trip or standby line-up; typical safeguard is a check valve at the discharge; consider backflow of process gas into utility headers.",
+   "guidewords": [
+    "REVERSE"
+   ],
+   "parameters": [
+    "flow"
+   ]
+  },
+  {
+   "chunk_id": "more-temperature",
+   "text": "More Temperature: loss of cooling medium, fouled cooler, fire case, machine recycle overheating, ambient extremes.",
+   "guidewords": [
+    "MORE"
+   ],
+   "parameters": [
+    "temperature"
+   ]
+  },
+  {
+   "chunk_id": "less-pressure",
+   "text": "Less Pressure: excessive demand, supply failure, leak or rupture, vacuum created by condensation or draining with vents closed.",
+   "guidewords": [
+    "LESS"
+   ],
+   "parameters": [
+    "pressure"
+   ]
+  },
+  {
+   "chunk_id": "more-level",
+   "text": "More Level: inlet exceeds outlet, level control failure, drain blocked; risk of liquid carryover into gas lines and machines.",
+   "guidewords": [
+    "MORE"
+   ],
+   "parameters": [
+    "level"
+   ]
+  },
+  {
+   "chunk_id": "no-level",
+   "text": "No/Less Level: loss of inflow (upstream tank empty, drain or bypass valve passing), outlet stuck open; risk of pump dry running and gas blow-by to the downstream system.",
+   "guidewords": [
+    "NO",
+    "LESS"
+   ],
+   "parameters": [
+    "level"
+   ]
+  }
+ ]
+}

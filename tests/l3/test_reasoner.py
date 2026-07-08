@@ -1,0 +1,366 @@
+"""
+test_reasoner.py — Unit tests for the deterministic reasoner components.
+
+Run:  python -m pytest tests/ -v      (or)   python -m unittest discover tests
+Everything here runs on mocks; no stage 1/2, no API key.
+"""
+
+import unittest
+
+from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
+from hazop.l3_reasoner.reasoner.core import AIReasoner
+from hazop.l3_reasoner.reasoner.critic import critique
+from hazop.l3_reasoner.reasoner.guidewords import (
+    Guideword, deviations_for_parameter, deviations_for_parameters,
+)
+from hazop.l3_reasoner.reasoner.llm import StubLLM, LLMInterface, GeneratedTriple, GeneratedFinding
+from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
+from hazop.l3_reasoner.reasoner.schema import Parameter
+from hazop.l3_reasoner.reasoner.topology import TopologyReasoner
+
+
+class TestGuidewords(unittest.TestCase):
+    def test_pressure_has_no_reverse(self):
+        devs = deviations_for_parameter(Parameter.PRESSURE)
+        gws = {d.guideword for d in devs}
+        self.assertNotIn(Guideword.REVERSE, gws)   # reverse pressure is nonsensical
+        self.assertIn(Guideword.MORE, gws)
+        self.assertIn(Guideword.LESS, gws)
+
+    def test_flow_includes_reverse(self):
+        devs = deviations_for_parameter(Parameter.FLOW)
+        gws = {d.guideword for d in devs}
+        self.assertIn(Guideword.REVERSE, gws)      # flow can reverse (FR-ARE-1)
+
+    def test_full_matrix_is_nonempty_and_ordered(self):
+        devs = deviations_for_parameters(
+            [Parameter.FLOW, Parameter.PRESSURE])
+        self.assertGreater(len(devs), 0)
+        labels = [d.label for d in devs]
+        self.assertIn("More Pressure", labels)
+        self.assertIn("Reverse Flow", labels)
+
+
+class TestTopology(unittest.TestCase):
+    def setUp(self):
+        self.tr = TopologyReasoner(build_topology())
+
+    def test_downstream_tracing(self):
+        ds = self.tr.downstream("P-101")
+        self.assertIn("V-201", ds)
+        self.assertIn("PSV-201", ds)
+
+    def test_upstream_tracing(self):
+        us = self.tr.upstream("V-201")
+        self.assertIn("P-101", us)
+        self.assertIn("TK-100", us)
+
+    def test_relief_path_detection(self):
+        self.assertTrue(self.tr.has_relief_path("P-101"))   # PSV-201 downstream
+        self.assertFalse(self.tr.has_relief_path("PSV-201"))  # nothing downstream
+
+    def test_relief_path_not_credited_through_blocking_equipment(self):
+        # TK-100's only route to PSV-201 passes a closable valve (V-SUCT)
+        # and a pump — that is not a credible relief path.
+        self.assertFalse(self.tr.has_relief_path("TK-100"))
+
+    def test_check_valve_on_path(self):
+        cvs = self.tr.check_valves_between("P-101", "V-201")
+        self.assertIn("CV-101", cvs)
+
+    def test_flow_paths_enumeration(self):
+        paths = self.tr.flow_paths("TK-100", "V-201")
+        self.assertEqual(paths,
+                         [["TK-100", "V-SUCT", "P-101", "CV-101", "V-201"]])
+        self.assertEqual(self.tr.flow_paths("V-201", "TK-100"), [])
+
+    def test_isolation_boundary_excludes_check_valves(self):
+        # A check valve cannot be closed on demand, so CV-101 must not count
+        # as downstream isolation for P-101.
+        boundary = self.tr.isolation_boundary("P-101")
+        self.assertEqual(boundary["upstream_isolation"], ["V-SUCT"])
+        self.assertNotIn("CV-101", boundary["downstream_isolation"])
+
+    def test_grounding_valid_and_invalid(self):
+        valid, invalid = self.tr.validate_tags(["P-101", "GHOST-999"])
+        self.assertEqual(valid, ["P-101"])
+        self.assertEqual(invalid, ["GHOST-999"])
+
+
+class TestDirectionAwareness(unittest.TestCase):
+    """Real stage-1 graphs verify direction on only part of the edges
+    (attributes["direction"]); results crossing unverified edges must be
+    reported as unverified and never carry the 0.99 safeguard claim."""
+
+    @staticmethod
+    def _topology(mid_direction: str):
+        from hazop.l3_reasoner.reasoner.schema import (Connection, EquipmentNode,
+                                     EquipmentType, TopologyGraph)
+        nodes = [
+            EquipmentNode("T-1", EquipmentType.TANK),
+            EquipmentNode("P-1", EquipmentType.PUMP),
+            EquipmentNode("V-1", EquipmentType.VESSEL),
+            EquipmentNode("PSV-1", EquipmentType.RELIEF_VALVE),
+        ]
+        edges = [
+            Connection("T-1", "P-1", attributes={"direction": "known"}),
+            Connection("P-1", "V-1", attributes={"direction": mid_direction}),
+            Connection("V-1", "PSV-1", attributes={"direction": "known"}),
+        ]
+        return TopologyGraph(nodes=nodes, edges=edges)
+
+    def test_verified_chain_behaves_classically(self):
+        tr = TopologyReasoner(self._topology("known"))
+        self.assertEqual(tr.downstream("T-1"), ["P-1", "PSV-1", "V-1"])
+        self.assertEqual(tr.downstream("T-1", verified_only=True),
+                         ["P-1", "PSV-1", "V-1"])
+        self.assertTrue(tr.has_relief_path("P-1"))
+
+    def test_unverified_edge_reachable_but_flagged(self):
+        tr = TopologyReasoner(self._topology("unknown"))
+        detail = tr.downstream_detail("T-1")
+        self.assertTrue(detail["P-1"])          # verified path
+        self.assertFalse(detail["V-1"])         # crosses the unknown edge
+        self.assertFalse(detail["PSV-1"])
+        self.assertEqual(tr.downstream("T-1", verified_only=True), ["P-1"])
+        # drawing order is arbitrary on unknown edges: reverse reachability
+        self.assertIn("P-1", tr.upstream_detail("V-1"))
+        self.assertIn("V-1", tr.downstream_detail("P-1"))
+
+    def test_relief_claim_needs_verified_directions(self):
+        tr = TopologyReasoner(self._topology("unknown"))
+        # PSV-1 sits behind the unknown edge from P-1's viewpoint
+        self.assertFalse(tr.has_relief_path("P-1"))
+        self.assertTrue(tr.has_relief_path("P-1", verified_only=False))
+        # from V-1 the relief edge itself is verified
+        self.assertTrue(tr.has_relief_path("V-1"))
+
+    def test_unverified_relief_flagged_not_credited_in_worksheet(self):
+        from hazop.l3_reasoner.reasoner.schema import StudyNode, Parameter as P
+        reasoner = AIReasoner(self._topology("unknown"), MockRetriever(),
+                              StubLLM())
+        node = StudyNode(node_id="N", description="pressure node",
+                         equipment_tags=["P-1"], design_intent="transfer",
+                         parameters=[P.PRESSURE])
+        rows = reasoner.analyze_node(node)
+        row = next(r for r in rows if r.deviation.label == "More Pressure")
+        relief = [f for f in row.safeguards if "elief path" in f.text]
+        self.assertEqual(len(relief), 1)
+        self.assertIn("not verified", relief[0].text)
+        self.assertLess(relief[0].confidence, 0.9)
+
+
+class TestAnthropicLLM(unittest.TestCase):
+    """AnthropicLLM against a fake transport — no network, no `anthropic`
+    package. Confidence must be composed from cited evidence (DDR-05),
+    never taken from the model."""
+
+    @staticmethod
+    def _fake_client(payload, stop_reason="end_turn"):
+        import json
+        from types import SimpleNamespace
+
+        class FakeMessages:
+            def __init__(self):
+                self.last_request = None
+
+            def create(self, **kwargs):
+                self.last_request = kwargs
+                return SimpleNamespace(
+                    stop_reason=stop_reason,
+                    content=[SimpleNamespace(type="text",
+                                             text=json.dumps(payload))],
+                )
+
+        return SimpleNamespace(messages=FakeMessages())
+
+    @staticmethod
+    def _evidence():
+        from hazop.l3_reasoner.reasoner.schema import RetrievedEvidence
+        return [RetrievedEvidence(source_id="DOC-1#a", source_type="standard",
+                                  snippet="Blocked outlet causes overpressure.",
+                                  score=0.9)]
+
+    def _deviation(self):
+        from hazop.l3_reasoner.reasoner.guidewords import deviations_for_parameter
+        return next(d for d in deviations_for_parameter(Parameter.PRESSURE)
+                    if d.label == "More Pressure")
+
+    def test_parses_triple_and_composes_confidence(self):
+        from hazop.l3_reasoner.reasoner.llm import AnthropicLLM
+        payload = {
+            "causes": [{"text": "Blocked outlet with pump running.",
+                        "referenced_tags": ["P-101"],
+                        "evidence_ids": ["DOC-1#a", "GHOST-DOC"]}],
+            "consequences": [{"text": "Overpressure of V-201.",
+                              "referenced_tags": ["V-201"],
+                              "evidence_ids": []}],
+            "safeguards": [],
+        }
+        client = self._fake_client(payload)
+        llm = AnthropicLLM(client=client)
+        triple = llm.generate_findings(
+            self._deviation(),
+            {"node_id": "N", "equipment_tags": ["P-101"],
+             "design_intent": "transfer"},
+            self._evidence())
+        cause = triple.causes[0]
+        # unknown evidence ids are dropped; known ones kept
+        self.assertEqual(cause.evidence_ids, ["DOC-1#a"])
+        # composed confidence: evidence-backed above the unsupported floor
+        self.assertGreater(cause.confidence, 0.5)
+        self.assertEqual(triple.consequences[0].confidence, 0.30)
+        self.assertEqual(triple.safeguards, [])
+        # request used structured outputs and never asked for self-reported
+        # confidence
+        req = client.messages.last_request
+        self.assertIn("output_config", req)
+        self.assertNotIn("confidence",
+                         str(req["output_config"]["format"]["schema"]))
+
+    def test_refusal_raises(self):
+        from hazop.l3_reasoner.reasoner.llm import AnthropicLLM
+        client = self._fake_client(
+            {"causes": [], "consequences": [], "safeguards": []},
+            stop_reason="refusal")
+        llm = AnthropicLLM(client=client)
+        with self.assertRaises(RuntimeError):
+            llm.generate_findings(
+                self._deviation(),
+                {"node_id": "N", "equipment_tags": [],
+                 "design_intent": ""},
+                self._evidence())
+
+
+class HallucinatingLLM(LLMInterface):
+    """Returns a finding referencing a tag that isn't in the topology."""
+    def generate_findings(self, deviation, node_context, evidence):
+        bad = GeneratedFinding(
+            text="Fault at GHOST-999 causes deviation.",
+            referenced_tags=["GHOST-999"],
+            confidence=0.9, evidence_ids=[],
+        )
+        return GeneratedTriple(causes=[bad], consequences=[], safeguards=[])
+
+
+class TestReasoner(unittest.TestCase):
+    def setUp(self):
+        self.topology = build_topology()
+        self.node = build_study_node()
+
+    def test_full_matrix_analyzed(self):
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        rows = r.analyze_node(self.node)
+        expected = len(deviations_for_parameters(self.node.parameters))
+        self.assertEqual(len(rows), expected)
+
+    def test_risk_ranking_is_never_autopopulated(self):
+        # FR-ARE-6: severity/likelihood must remain human-only.
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        for row in r.analyze_node(self.node):
+            self.assertIsNone(row.severity)
+            self.assertIsNone(row.likelihood)
+
+    def test_grounding_gate_rejects_hallucinated_tags(self):
+        # FR-ARE-9 / MDL-10: findings citing unknown tags are dropped.
+        r = AIReasoner(self.topology, MockRetriever(), HallucinatingLLM(),
+                       grounding_required=True)
+        rows = r.analyze_node(self.node)
+        for row in rows:
+            for f in row.causes:
+                self.assertNotIn("GHOST-999", f.text)
+
+    def test_grounding_rejections_are_audited(self):
+        # NFR-S-01 auditability: a rejected finding leaves a trace naming the
+        # invalid tags, and the critic reports the rejection count.
+        r = AIReasoner(self.topology, MockRetriever(), HallucinatingLLM(),
+                       grounding_required=True)
+        rows = r.analyze_node(self.node)
+        for row in rows:
+            self.assertEqual(len(row.rejected_findings), 1)
+            rej = row.rejected_findings[0]
+            self.assertEqual(rej.kind, "cause")
+            self.assertEqual(rej.invalid_tags, ["GHOST-999"])
+            self.assertIn("rejected_findings", row.to_dict())
+        report = critique(self.node, rows)
+        self.assertEqual(report.rejected_finding_count, len(rows))
+        self.assertIn("grounding gate", report.summary())
+
+    def test_export_preserves_evidence_and_confidence(self):
+        # NFR-S-02 / FR-ARE-5: evidence ids + confidence must survive export.
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        rows = r.analyze_node(self.node)
+        pressure_more = next(x for x in rows
+                             if x.deviation.label == "More Pressure")
+        d = pressure_more.to_dict()
+        evidence_backed = [c for c in d["causes"] if c["evidence"]]
+        self.assertTrue(evidence_backed)
+        for c in d["causes"]:
+            self.assertIn("confidence", c)
+            self.assertIn("supported", c)
+            self.assertIn("provenance", c)
+
+    def test_reverse_flow_safeguard_is_tag_order_independent(self):
+        # equipment_tags has no ordering contract; CV-101 must be found even
+        # when the list is in reverse flow order.
+        node = build_study_node()
+        node.equipment_tags = list(reversed(node.equipment_tags))
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        rows = r.analyze_node(node)
+        rev = next(x for x in rows if x.deviation.label == "Reverse Flow")
+        cv_findings = [f for f in rev.safeguards if "CV-101" in f.text]
+        self.assertEqual(len(cv_findings), 1)
+
+    def test_topology_safeguard_is_supported(self):
+        # A topology-confirmed safeguard must not be flagged unsupported.
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        rows = r.analyze_node(self.node)
+        pressure_more = next(x for x in rows if x.deviation.label == "More Pressure")
+        topo = [f for f in pressure_more.safeguards if f.topology_grounded]
+        self.assertTrue(topo)
+        self.assertTrue(all(f.is_supported for f in topo))
+        self.assertTrue(all("UNSUPPORTED" not in f.label for f in topo))
+
+    def test_no_duplicate_check_valve_safeguard(self):
+        r = AIReasoner(self.topology, MockRetriever(), StubLLM())
+        rows = r.analyze_node(self.node)
+        rev = next(x for x in rows if x.deviation.label == "Reverse Flow")
+        cv_findings = [f for f in rev.safeguards if "CV-101" in f.text]
+        self.assertEqual(len(cv_findings), 1)
+
+
+class TestMockRetriever(unittest.TestCase):
+    def test_compound_guideword_tokenizes(self):
+        # "No/Not flow" must match the {"no", "flow"} entry with full overlap,
+        # ranking it above entries that only share "flow".
+        results = MockRetriever().retrieve("No/Not flow")
+        self.assertTrue(results)
+        self.assertEqual(results[0].source_id, "HIST-HAZOP-007#N2")
+
+    def test_structured_filters_used(self):
+        results = MockRetriever().retrieve(
+            "anything", filters={"guideword": "MORE", "parameter": "pressure"})
+        self.assertTrue(results)
+        self.assertEqual(results[0].source_id, "HIST-HAZOP-012#N4")
+
+
+class TestCritic(unittest.TestCase):
+    def test_complete_when_all_deviations_covered(self):
+        node = build_study_node()
+        r = AIReasoner(build_topology(), MockRetriever(), StubLLM())
+        rows = r.analyze_node(node)
+        report = critique(node, rows)
+        self.assertTrue(report.is_complete)
+        self.assertEqual(report.missing_deviations, [])
+
+    def test_gap_detected_when_deviation_missing(self):
+        node = build_study_node()
+        r = AIReasoner(build_topology(), MockRetriever(), StubLLM())
+        rows = r.analyze_node(node)
+        report = critique(node, rows[:-3])   # drop a few rows
+        self.assertFalse(report.is_complete)
+        self.assertTrue(report.missing_deviations)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

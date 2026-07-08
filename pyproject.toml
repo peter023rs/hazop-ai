@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hazop-ai"
+version = "0.1.0"
+description = "HAZOP-AI: P&ID extraction (L1) -> plant knowledge (L2) -> AI HAZOP reasoning (L3), with a web dashboard."
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "networkx>=3.0",
+    "pymupdf>=1.23",   # imported as `fitz` (L1 P&ID parsing)
+]
+
+[project.optional-dependencies]
+# Neo4j graph store (L2 plant_graph.neo4j_store)
+neo4j = ["neo4j>=5.0"]
+# Real Anthropic model client (L3 reasoner.llm.AnthropicLLM); the stub needs nothing
+llm = ["anthropic>=0.40"]
+# DEXPI native export (L1 export_pydexpi_native)
+dexpi = ["pydexpi"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+hazop-l1     = "hazop.l1_extraction.pipeline:_cli"
+hazop-web    = "hazop.web.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

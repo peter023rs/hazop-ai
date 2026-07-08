@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv*
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.DS_Store
+.idea
+.vscode
+outputs
+runs
+tests
+Dockerfile
+docker-compose.yml

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+.venv*/
+venv/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Pipeline outputs & run artifacts (regenerated)
+outputs/
+runs/
+*.log
+.pytest_cache/

@@ -1,0 +1,27 @@
+{
+  "doc_id": "DS-K001",
+  "source_type": "datasheet",
+  "title": "Centrifugal air compressor datasheet notes (K-001 class)",
+  "date": "2018-02-14",
+  "curation": "approved",
+  "curator": "pqiu",
+  "confidentiality": "internal",
+  "applicability": {
+    "equipment_classes": ["compressor"],
+    "unit_types": ["air_station"]
+  },
+  "chunks": [
+    {
+      "chunk_id": "surge",
+      "text": "Operation below minimum flow drives the centrifugal compressor into surge: violent flow reversal, vibration and possible impeller damage. Anti-surge (blow-off) valve with dedicated controller is required; verify blow-off line is never blocked.",
+      "guidewords": ["LESS", "NO", "REVERSE"],
+      "parameters": ["flow"]
+    },
+    {
+      "chunk_id": "deadhead",
+      "text": "Maximum discharge pressure at zero flow (deadhead) is approximately 1.25 times normal discharge pressure per the performance curve; downstream equipment design pressure must exceed this or relief protection is required.",
+      "guidewords": ["MORE"],
+      "parameters": ["pressure"]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+services:
+  hazop-web:
+    build: .
+    ports:
+      - "8780:8780"

@@ -1,0 +1,26 @@
+{
+  "doc_id": "SDS-N2",
+  "source_type": "sds",
+  "title": "Safety Data Sheet — Nitrogen, compressed (excerpt)",
+  "date": "2023-05-10",
+  "curation": "approved",
+  "curator": "pqiu",
+  "confidentiality": "public",
+  "applicability": {
+    "chemistry": ["nitrogen"]
+  },
+  "chunks": [
+    {
+      "chunk_id": "asphyxiation",
+      "text": "Nitrogen is a simple asphyxiant. Release into enclosed or poorly ventilated areas displaces oxygen without warning; oxygen deficiency below 19.5 percent is immediately dangerous. Any leak of nitrogen lines routed through buildings or analyzer shelters is an asphyxiation hazard.",
+      "guidewords": ["NO", "LESS", "OTHER THAN"],
+      "parameters": ["composition", "flow"]
+    },
+    {
+      "chunk_id": "backflow-contamination",
+      "text": "Prevent backflow of process fluids into the nitrogen distribution system; contamination of the inert gas header defeats its purging function. Check valves and double block and bleed are typical safeguards at user connections.",
+      "guidewords": ["REVERSE", "AS WELL AS"],
+      "parameters": ["flow", "composition"]
+    }
+  ]
+}

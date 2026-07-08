@@ -1,0 +1,19 @@
+{
+  "doc_id": "GOLD-EVAL-NODE1",
+  "source_type": "historical_hazop",
+  "title": "Gold-standard reference worksheet (evaluation holdout)",
+  "date": "2026-07-01",
+  "curation": "approved",
+  "curator": "pqiu",
+  "confidentiality": "internal",
+  "holdout": true,
+  "applicability": {},
+  "chunks": [
+    {
+      "chunk_id": "g1",
+      "text": "Expert-authored reference answer used to score the reasoner. If this text is ever retrievable the evaluation is contaminated (DDR-04 / MDL-7): the AI would be graded against answers it can look up.",
+      "guidewords": ["MORE"],
+      "parameters": ["pressure"]
+    }
+  ]
+}

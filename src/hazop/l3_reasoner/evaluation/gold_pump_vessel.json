@@ -1,0 +1,123 @@
+{
+  "node_id": "NODE-1",
+  "description": "Gold standard for the mock pump/vessel process (TK-100 -> P-101 -> V-201). Hand-authored: what a competent HAZOP team would require as a minimum for this node. Misses against this set indicate KB/retrieval gaps to close (README 'later 20%').",
+  "expected_deviations": [
+    "No/Not Flow",
+    "More Flow",
+    "Less Flow",
+    "Reverse Flow",
+    "More Pressure",
+    "Less Pressure",
+    "More Temperature",
+    "Less Temperature",
+    "More Level",
+    "Less Level",
+    "No/Not Level"
+  ],
+  "deviations": {
+    "No/Not Flow": {
+      "causes": [
+        {
+          "description": "Pump P-101 trips",
+          "match_any": [["pump trip"]]
+        },
+        {
+          "description": "Suction valve V-SUCT closed in error",
+          "match_any": [["suction valve closed"], ["suction", "closed"]]
+        }
+      ],
+      "consequences": [
+        {
+          "description": "Loss of level control in V-201 / pump dry running",
+          "match_any": [["loss of level"], ["dry running"]]
+        }
+      ]
+    },
+    "Less Flow": {
+      "causes": [
+        {
+          "description": "Partial blockage or fouling of discharge line",
+          "match_any": [["blockage"], ["fouling"]]
+        },
+        {
+          "description": "Cavitation at low NPSH",
+          "match_any": [["cavitation"]]
+        }
+      ]
+    },
+    "Reverse Flow": {
+      "causes": [
+        {
+          "description": "Pump trip with downstream pressure above discharge",
+          "match_any": [["pump trip"]]
+        }
+      ],
+      "consequences": [
+        {
+          "description": "Back-flow into pump/suction, reverse rotation or contamination",
+          "match_any": [["back-flow"], ["backflow"], ["reverse rotation"]]
+        }
+      ],
+      "safeguards": [
+        {
+          "description": "Check valve CV-101 on pump discharge",
+          "match_any": [["check valve"]]
+        }
+      ]
+    },
+    "More Pressure": {
+      "causes": [
+        {
+          "description": "Blocked or restricted outlet with pump running",
+          "match_any": [["blocked outlet"], ["blocked/restricted outlet"]]
+        },
+        {
+          "description": "Thermal expansion of blocked-in liquid",
+          "match_any": [["thermal expansion"]]
+        }
+      ],
+      "consequences": [
+        {
+          "description": "Overpressure of V-201, potential loss of containment",
+          "match_any": [["overpressure"], ["loss of containment"]]
+        }
+      ],
+      "safeguards": [
+        {
+          "description": "Relief protection via PSV-201",
+          "match_any": [["relief"], ["psv"]]
+        }
+      ]
+    },
+    "More Temperature": {
+      "causes": [
+        {
+          "description": "Loss of cooling leading to exothermic decomposition",
+          "match_any": [["loss of cooling"], ["decompos"]]
+        }
+      ]
+    },
+    "More Level": {
+      "causes": [
+        {
+          "description": "Level control failure (LIC fails, outlet blocked)",
+          "match_any": [["level control fail"], ["lic fail"]]
+        }
+      ],
+      "safeguards": [
+        {
+          "description": "Independent high level alarm on V-201",
+          "match_any": [["high level alarm"], ["lah"]]
+        }
+      ]
+    },
+    "No/Not Level": {
+      "causes": [
+        {
+          "description": "Loss of inflow from TK-100 (tank empty, drain passing)",
+          "match_any": [["loss of inflow"], ["tank empty"], ["drain"]]
+        }
+      ]
+    }
+  }
+}
