@@ -13,13 +13,17 @@ Offline, deterministic, no API key — same philosophy as the L3 scaffold.
 """
 
 import json
-import sys
+import os
 from pathlib import Path
 
+# Runtime data ships with the repo under data/ (override with HAZOP_DATA,
+# e.g. the Docker image sets HAZOP_DATA=/app/data).
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-L1_MODEL = ROOT / "hazop_L1(Extraction)" / "output" / "plant_model_dexpi.json"
-L3_DIR = ROOT / "hazop_L3(AI reasoner)"
+REPO_ROOT = HERE.parents[2]               # .../hazop-ai
+DATA_DIR = Path(os.environ.get("HAZOP_DATA", REPO_ROOT / "data"))
+CORPUS_DIR = DATA_DIR / "corpus"
+L1_MODEL = DATA_DIR / "l1_output" / "plant_model_dexpi.json"
+OUT_DIR = REPO_ROOT / "outputs"
 
 from hazop.l2_knowledge.kb import KBRetriever, as_l3_retriever
 from hazop.l2_knowledge.plant_graph import build_equipment_graph, load_plant_model, to_l3_topology
@@ -29,7 +33,7 @@ def part_a() -> KBRetriever:
     print("=" * 78)
     print("A. KNOWLEDGE BASE — ingest corpus, hybrid retrieval")
     print("=" * 78)
-    kb = KBRetriever(HERE / "corpus")
+    kb = KBRetriever(CORPUS_DIR)
     print(kb.report.summary())
 
     for query, filters in [
@@ -68,11 +72,10 @@ def part_b() -> dict:
         by_type[n["equipment_type"]] = by_type.get(n["equipment_type"], 0) + 1
     print("  node types:", ", ".join(f"{t}={c}" for t, c in sorted(by_type.items())))
 
-    out = HERE / "output"
-    out.mkdir(exist_ok=True)
-    with open(out / "topology_equipment_level.json", "w", encoding="utf-8") as f:
+    OUT_DIR.mkdir(exist_ok=True)
+    with open(OUT_DIR / "topology_equipment_level.json", "w", encoding="utf-8") as f:
         json.dump(graph, f, indent=2, ensure_ascii=False)
-    print(f"  written to {out / 'topology_equipment_level.json'}")
+    print(f"  written to {OUT_DIR / 'topology_equipment_level.json'}")
 
     tagged = [n for n in graph["nodes"]
               if n["equipment_type"] in ("compressor", "vessel", "tank", "pump")
@@ -86,7 +89,6 @@ def part_c(kb: KBRetriever, graph: dict) -> None:
     print("\n" + "=" * 78)
     print("C. INTEGRATION — stage 3 reasoner running on stage 2 components")
     print("=" * 78)
-    sys.path.insert(0, str(L3_DIR))
     from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
     from hazop.l3_reasoner.reasoner.core import AIReasoner
     from hazop.l3_reasoner.reasoner.critic import critique

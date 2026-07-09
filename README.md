@@ -3,6 +3,17 @@
 End-to-end pipeline that turns a P&ID drawing into an AI-assisted HAZOP worksheet,
 organized as a single installable Python package (`hazop`) with one subpackage per stage.
 
+Each stage has its own README explaining what it does, how it works
+module-by-module, current numbers on the real 2401 drawing, and honest
+limitations:
+
+| stage | guide |
+|---|---|
+| Stage 1 — P&ID → topology graph (deterministic, no ML/OCR) | [src/hazop/l1_extraction/README.md](src/hazop/l1_extraction/README.md) |
+| Stage 2 — plant graph + curated KB retrieval | [src/hazop/l2_knowledge/README.md](src/hazop/l2_knowledge/README.md) |
+| Stage 3 — guideword reasoning → HAZOP worksheet | [src/hazop/l3_reasoner/README.md](src/hazop/l3_reasoner/README.md) |
+| Integrated dashboard on :8780 | [src/hazop/web/README.md](src/hazop/web/README.md) |
+
 ```
 hazop-ai/
 ├── pyproject.toml            # single project: deps, optional extras, entry points

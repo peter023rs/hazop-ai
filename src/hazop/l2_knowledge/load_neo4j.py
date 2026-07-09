@@ -13,15 +13,19 @@ server.
 """
 
 import argparse
+import os
 from pathlib import Path
 
 from hazop.l2_knowledge.plant_graph import build_equipment_graph, load_plant_model
 from hazop.l2_knowledge.plant_graph.neo4j_store import load, to_cypher
 
+# Runtime data ships with the repo under data/ (override with HAZOP_DATA,
+# e.g. the Docker image sets HAZOP_DATA=/app/data).
 HERE = Path(__file__).resolve().parent
-L1_MODEL = (HERE.parent / "hazop_L1(Extraction)" / "output"
-            / "plant_model_dexpi.json")
-OUT_CYPHER = HERE / "output" / "plant_graph_2401.cypher"
+REPO_ROOT = HERE.parents[2]               # .../hazop-ai
+DATA_DIR = Path(os.environ.get("HAZOP_DATA", REPO_ROOT / "data"))
+L1_MODEL = DATA_DIR / "l1_output" / "plant_model_dexpi.json"
+OUT_CYPHER = REPO_ROOT / "outputs" / "plant_graph_2401.cypher"
 
 SAMPLE_QUERIES = """\
 // verified flow downstream of the first-stage compressor
@@ -55,6 +59,7 @@ def main() -> int:
           f"{stats['connections']} connections "
           f"({stats['directed_connections']} with verified direction)")
 
+    OUT_CYPHER.parent.mkdir(exist_ok=True)
     OUT_CYPHER.write_text(to_cypher(graph), encoding="utf-8")
     print(f"cypher script -> {OUT_CYPHER}")
 
