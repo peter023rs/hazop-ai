@@ -60,6 +60,9 @@
  .stagebox{flex:1;min-width:250px}
  .arrow{color:var(--dim);font-size:22px}
  .spin{color:var(--dim);font-size:13px;padding:20px}
+ button.tele{background:none;border:1px solid var(--line);border-radius:4px;
+     color:var(--dim);cursor:pointer;font-size:11px;padding:1px 5px;margin-left:2px}
+ button.tele:hover{border-color:var(--blue);color:var(--blue)}
 </style>
 </head>
 <body>
@@ -73,6 +76,8 @@
  <button data-tab="graph">L2 · Plant Graph</button>
  <button data-tab="kb">L2 · Knowledge Base</button>
  <button data-tab="ws">L3 · HAZOP Worksheet</button>
+ <button data-tab="mdl">§4 · Model Gates</button>
+ <button data-tab="rtm">Tasks · RTM</button>
 </nav>
 
 <div id="tab-overview" class="tab">
@@ -150,6 +155,44 @@
  </div>
 </div>
 
+<div id="tab-mdl" class="tab" style="display:none">
+ <div class="card">
+  <h2>Section 4.3 model-performance gates <span class="dim">(MDL-7 … MDL-13, one measured run)</span></h2>
+  <select id="mdl-retriever">
+   <option value="mock">MockRetriever (L3 baseline)</option>
+   <option value="kb">Stage-2 KB (integrated)</option>
+  </select>
+  <button class="act" id="mdl-go">Run scorecard</button>
+  <span class="dim" id="mdl-note"></span>
+ </div>
+ <div class="grid" id="mdl-gates"><div class="spin">run the scorecard…</div></div>
+ <div class="card">
+  <h2>MDL-12 · per-deviation latency <span class="dim">(full pipeline, serial — what a scribe waits for)</span></h2>
+  <div id="mdl-latency" class="dim">—</div>
+ </div>
+ <div class="card">
+  <h2>MDL-11 · expert audit sample <span class="dim">(released citation-bearing suggestions; the &lt;1% verdict is the human auditor's)</span></h2>
+  <div id="mdl-audit" class="dim">—</div>
+ </div>
+ <div class="card">
+  <h2>MDL-14 · accept/edit/reject telemetry <span class="dim">(append-only JSONL — use the ✓ ✎ ✗ buttons on the Worksheet tab to record events)</span></h2>
+  <div id="mdl-telemetry" class="dim">—</div>
+ </div>
+</div>
+
+<div id="tab-rtm" class="tab" style="display:none">
+ <div class="card">
+  <h2>Requirements Traceability Matrix <span class="dim">(Fable §9 — every FR/AR/MDL/DR/NFR/VV item, status is human judgment, code citations auto-scanned)</span></h2>
+  <div id="rtm-overall" class="dim">loading…</div>
+ </div>
+ <div class="grid" id="rtm-sections"></div>
+ <div class="card">
+  <span id="rtm-filters"></span>
+  &nbsp;&nbsp;<input type="text" id="rtm-search" placeholder="filter… e.g. FR-ARE, telemetry, simulator" style="width:280px">
+  <div style="overflow-x:auto"><table id="rtm-table"></table></div>
+ </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const esc = t => (t??'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -164,7 +207,8 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 const done = {};
 function init(tab){ if(done[tab]) return; done[tab] = true;
-  ({overview: loadOverview, l1: loadL1, graph: loadGraph, kb: loadKB, ws: loadWS})[tab](); }
+  ({overview: loadOverview, l1: loadL1, graph: loadGraph, kb: loadKB,
+    ws: loadWS, mdl: loadMDL, rtm: loadRTM})[tab](); }
 
 /* ---------- overview ---------- */
 async function loadOverview(){
@@ -351,9 +395,11 @@ async function loadWS(){
       corpus yet. It closes by ingesting real historical HAZOP worksheets, which is the KB's
       planned build-out, not a reasoner defect.</p>` : ''}`;
 }
+let wsNodeId = '';
 async function runWS(){
   $('#ws-out').innerHTML = '<div class="spin">running reasoner…</div>';
   const d = await (await fetch('/api/worksheet?node=' + $('#ws-node').value)).json();
+  wsNodeId = d.node.node_id;
   $('#ws-meta').innerHTML = `<p class="dim" style="margin-bottom:0">
     <b>${esc(d.node.node_id)}</b> — ${esc(d.node.description)} ·
     members: ${d.node.equipment_tags.map(t=>`<span class="chip">${esc(t)}</span>`).join('')} ·
@@ -361,17 +407,25 @@ async function runWS(){
   const conf = c => `<span class="confbar" title="confidence ${c}"><i style="width:${c*100}%"></i></span>`;
   const evd = f => f.evidence.map(e =>
     `<span class="ev" title="${esc(e.snippet)}">[${esc(e.source_id)}]</span>`).join(' ');
-  const cell = fs => fs.map(f => `<div class="finding">
+  const tele = (f, dev, kind) => ['accepted ✓','edited ✎','rejected ✗'].map(a => {
+    const [action, icon] = a.split(' ');
+    return `<button class="tele" title="${action} (MDL-14 telemetry)"
+      onclick="recordTelemetry(this,'${action}','${esc(dev)}','${kind}','${esc(f.text).replace(/'/g,'&#39;')}')">${icon}</button>`;
+  }).join('');
+  const cell = (fs, dev, kind) => fs.map(f => `<div class="finding">
      ${f.supported ? '' : '<span class="badge b-orange">UNSUPPORTED</span> '}
      ${f.topology_grounded ? '<span class="badge b-green" title="deterministic graph fact">topology</span> ' : ''}
      ${esc(f.text)}<br>${conf(f.confidence)} <span class="dim">${f.confidence}</span> ${evd(f)}
+     <span style="float:right">${tele(f, dev, kind)}</span>
     </div>`).join('');
   const rejected = d.rows.flatMap(r => r.rejected.map(x => ({dev:r.deviation, ...x})));
   $('#ws-out').innerHTML = `
    <div class="card" style="overflow-x:auto"><table>
     <tr><th style="width:110px">deviation</th><th>causes</th><th>consequences</th><th>safeguards</th></tr>
     ${d.rows.map(r=>`<tr><td><b>${esc(r.deviation)}</b></td>
-      <td>${cell(r.causes)}</td><td>${cell(r.consequences)}</td><td>${cell(r.safeguards)}</td></tr>`).join('')}
+      <td>${cell(r.causes, r.deviation, 'cause')}</td>
+      <td>${cell(r.consequences, r.deviation, 'consequence')}</td>
+      <td>${cell(r.safeguards, r.deviation, 'safeguard')}</td></tr>`).join('')}
    </table></div>
    <div class="card"><h2>Grounding-gate audit
      <span class="dim">(rejected findings are kept, never silently dropped — MDL-10)</span></h2>
@@ -381,6 +435,145 @@ async function runWS(){
       : '<p class="dim">no findings rejected on this run — hallucination rate 0%</p>'}
    </div>
    <div class="card"><h2>Completeness critic</h2><pre>${esc(d.critic)}</pre></div>`;
+}
+
+/* ---------- Section 4 · model gates ---------- */
+async function loadMDL(){
+  $('#mdl-go').onclick = runScorecard;
+  runScorecard();
+  loadTelemetry();
+}
+const GATE_BADGE = {pass:'<span class="badge b-green">PASS</span>',
+  fail:'<span class="badge b-red">FAIL</span>',
+  human_audit:'<span class="badge b-orange">HUMAN AUDIT</span>'};
+async function runScorecard(){
+  $('#mdl-gates').innerHTML = '<div class="spin">running one measured pass…</div>';
+  const d = await (await fetch('/api/scorecard?retriever=' + $('#mdl-retriever').value)).json();
+  $('#mdl-note').textContent = d.meta.note;
+  $('#mdl-gates').innerHTML = d.gates.map(g => `
+   <div class="card">
+    <h2>${esc(g.id)} <span class="dim">· ${esc(g.name)}</span>
+      <span style="float:right">${GATE_BADGE[g.status]}</span></h2>
+    <div class="big">${esc(g.display)}</div>
+    <div class="dim">target ${esc(g.target)}</div>
+    ${g.detail.length ? '<h3>detail</h3>' + g.detail.map(x =>
+       `<div class="kv"><span>${esc(x)}</span><span></span></div>`).join('') : ''}
+   </div>`).join('');
+  const maxMs = Math.max(...d.latency.timings_ms, 1);
+  $('#mdl-latency').innerHTML = d.latency.labels.map((l,i) => `
+    <div class="kv"><span style="width:150px">${esc(l)}</span>
+     <span style="flex:1;padding:0 10px"><span class="scorebar" style="margin:0">
+       <i style="width:${Math.max(2, 100*d.latency.timings_ms[i]/maxMs)}%"></i></span></span>
+     <span>${d.latency.timings_ms[i]} ms</span></div>`).join('');
+  $('#mdl-audit').innerHTML = d.audit_sample.length ? `<table>
+    <tr><th>sample</th><th>deviation</th><th>kind</th><th>claim</th><th>citations (Stage B verdict)</th></tr>
+    ${d.audit_sample.map(s => `<tr><td>${esc(s.sample_id)}</td>
+      <td>${esc(s.deviation)}</td><td>${esc(s.kind)}</td>
+      <td>${esc(s.claim)}</td>
+      <td>${s.citations.map(c => `<div class="finding">
+        <b>${esc(c.evidence_id)}</b>
+        <span class="badge ${c.verdict==='supported'?'b-green':'b-orange'}">${esc(c.verdict)}</span>
+        <span class="ev" title="${esc(c.rationale)}">${esc(c.snippet)}</span></div>`).join('')}</td>
+     </tr>`).join('')}</table>`
+    : 'no citation-bearing suggestions in this run';
+}
+async function loadTelemetry(){
+  const t = await (await fetch('/api/telemetry')).json();
+  const n = a => t.by_action[a] || 0;
+  $('#mdl-telemetry').innerHTML = t.total === 0
+    ? 'no events recorded yet — accept (✓), edit (✎) or reject (✗) suggestions on the Worksheet tab'
+    : `<div class="kv"><span>total events</span><span>${t.total}</span></div>
+       <div class="kv"><span>accepted → ai_generated_human_approved</span><span>${n('accepted')}</span></div>
+       <div class="kv"><span>edited → ai_generated_human_modified</span><span>${n('edited')}</span></div>
+       <div class="kv"><span>rejected (removed from body, kept in audit trail)</span><span>${n('rejected')}</span></div>
+       ${Object.entries(t.by_kind).map(([k,v]) => `<div class="kv"><span>· ${esc(k)}</span>
+         <span>${Object.entries(v).map(([a,c])=>a+' '+c).join(' · ')}</span></div>`).join('')}`;
+}
+async function recordTelemetry(btn, action, dev, kind, text){
+  let edited = '';
+  if(action === 'edited'){
+    edited = prompt('Edited worksheet text:', text) || '';
+    if(!edited) return;
+  }
+  const r = await fetch('/api/telemetry', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({study_id:'DASH-DEMO', node_id: wsNodeId,
+      deviation_label: dev, kind: kind, suggestion_text: text,
+      action: action, edited_text: edited, user: 'dashboard',
+      model_version: 'StubLLM', prompt_template_version: 'v1',
+      kb_snapshot_version: $('#ws-node').value})});
+  btn.style.color = r.ok ? 'var(--green)' : 'var(--red)';
+  if(r.ok && done['mdl']) loadTelemetry();
+}
+
+/* ---------- Tasks · RTM ---------- */
+const RTM_STATUSES = ['done','partial','todo','blocked','out_of_scope'];
+const RTM_BADGE = {done:'b-green', partial:'b-orange', todo:'b-grey',
+                   blocked:'b-red', out_of_scope:'b-grey'};
+let rtmData = null, rtmFilter = 'all';
+async function loadRTM(){
+  rtmData = await (await fetch('/api/rtm')).json();
+  $('#rtm-search').oninput = renderRTMTable;
+  renderRTM();
+}
+function renderRTM(){
+  const ov = rtmData.rollup.overall;
+  $('#rtm-overall').innerHTML =
+    `<span class="big" style="color:var(--fg)">${Math.round(100*ov.progress)}%</span>
+     <span class="dim"> weighted progress over ${ov.total} requirements — </span>
+     ${RTM_STATUSES.map(s => `<span class="badge ${RTM_BADGE[s]}">${s} ${ov.counts[s]||0}</span>`).join(' ')}
+     <div class="scorebar" style="max-width:520px"><i style="width:${100*ov.progress}%"></i></div>`;
+  const secs = rtmData.rollup.sections;
+  $('#rtm-sections').innerHTML = Object.entries(secs).map(([name,s]) => `
+    <div class="card">
+     <h2 style="font-size:13px">${esc(name)} <span class="dim">${Math.round(100*s.progress)}%</span></h2>
+     <div class="scorebar"><i style="width:${100*s.progress}%"></i></div>
+     <div class="dim" style="margin-top:6px">
+       ${RTM_STATUSES.filter(st=>s.counts[st]).map(st=>`${st} ${s.counts[st]}`).join(' · ')}</div>
+    </div>`).join('');
+  $('#rtm-filters').innerHTML = ['all', ...RTM_STATUSES].map(s =>
+    `<button class="tele" style="font-size:12px;padding:4px 10px" data-f="${s}"
+       ${s===rtmFilter?'style="color:var(--blue);border-color:var(--blue);font-size:12px;padding:4px 10px"':''}
+     >${s}</button>`).join(' ');
+  document.querySelectorAll('#rtm-filters button').forEach(b =>
+    b.onclick = () => { rtmFilter = b.dataset.f; renderRTM(); });
+  renderRTMTable();
+}
+function renderRTMTable(){
+  const q = ($('#rtm-search').value||'').toLowerCase();
+  const rows = rtmData.requirements.filter(r =>
+    (rtmFilter==='all' || r.status===rtmFilter) &&
+    (!q || (r.id + ' ' + r.section + ' ' + r.text + ' ' + r.notes).toLowerCase().includes(q)));
+  const cite = r => r.citations.length
+    ? `<span class="chip v" title="${r.citations.map(c=>c.file+':'+c.line).join('\n')}">cited ×${r.citations.length}</span>`
+    : '<span class="chip">no code citations</span>';
+  const evid = r => r.evidence.map(e=>`<span class="chip" title="${esc(e)}">${esc(e.split('/').pop())}</span>`).join('');
+  $('#rtm-table').innerHTML = `
+   <tr><th style="width:86px">id</th><th>requirement</th><th style="width:110px">status</th>
+       <th>notes</th><th style="width:170px">evidence</th></tr>` +
+   rows.map(r => `<tr>
+     <td><b>${esc(r.id)}</b><br><span class="dim" style="font-size:10px">${esc(r.section.split(' ')[0])}</span></td>
+     <td>${esc(r.text)}</td>
+     <td><span class="badge ${RTM_BADGE[r.status]}">${esc(r.status)}</span><br>
+       <select data-id="${esc(r.id)}" class="rtm-status" style="margin-top:4px;padding:3px;font-size:11px">
+        ${RTM_STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}</select></td>
+     <td><input type="text" class="rtm-notes" data-id="${esc(r.id)}" value="${esc(r.notes).replace(/"/g,'&quot;')}"
+          style="width:100%;font-size:11px;padding:5px"></td>
+     <td>${cite(r)}${evid(r)}</td>
+    </tr>`).join('');
+  document.querySelectorAll('.rtm-status').forEach(sel =>
+    sel.onchange = () => saveRTM(sel.dataset.id, {status: sel.value}));
+  document.querySelectorAll('.rtm-notes').forEach(inp =>
+    inp.onchange = () => saveRTM(inp.dataset.id, {notes: inp.value}));
+}
+async function saveRTM(id, patch){
+  const r = await fetch('/api/rtm/' + encodeURIComponent(id), {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(patch)});
+  if(!r.ok){ alert('save failed: ' + (await r.json()).error); return; }
+  const upd = await r.json();
+  const local = rtmData.requirements.find(x => x.id === id);
+  local.status = upd.status; local.notes = upd.notes;
+  renderRTM();
 }
 
 init('overview');

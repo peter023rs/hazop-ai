@@ -78,6 +78,10 @@ def orient_runs(nodes, runs, arrows, connectors):
         incident to the valve
       - off-page connector text: 至/去 (to) = flow toward the connector,
         自/来 (from) = flow away from it
+      - safety-valve orientation (equipment semantics): PSVs are angle
+        valves drawn spring-up in this convention — the process inlet rises
+        into the valve from below, the outlet leaves horizontally; flow is
+        always inlet -> valve -> outlet
     Propagation: flow passes straight through any node with exactly two
     solid-pipe runs (valves, spec breaks, leftover pass-throughs). At a
     branching junction directions are only inferred by conservation — a
@@ -144,6 +148,39 @@ def orient_runs(nodes, runs, arrows, connectors):
                 set_dir(r, "ba" if to_conn else "ab", "connector")
             elif r["b"] == nid:
                 set_dir(r, "ab" if to_conn else "ba", "connector")
+
+    # --- seeds: safety-valve orientation --------------------------------------
+    # every PSV on this drawing follows one template (verified pages
+    # 5/7/9/10/12): angle valve, spring ticks up, inlet run rising into the
+    # valve from BELOW, outlet run leaving horizontally. Flow through a
+    # relief valve is one-way by construction, so both runs get a seed;
+    # bonnet/vent stubs (approach from above) and PSV-bubble leaders
+    # (far node = instrument) are not process pipes and are skipped.
+    for n in nodes:
+        if n["kind"] != "valve" or n.get("subclass") != "safety":
+            continue
+        for r in incident[n["id"]]:
+            if r["a"] == r["b"]:
+                continue  # spring-tick self loop
+            far = node_by_id.get(r["b"] if r["a"] == n["id"] else r["a"])
+            if far is None or far["kind"] == "instrument":
+                continue
+            pts = r["points"]
+            if math.dist(pts[0], n["xy"]) <= math.dist(pts[-1], n["xy"]):
+                near, nxt = pts[0], pts[1]
+            else:
+                near, nxt = pts[-1], pts[-2]
+            dx, dy = nxt[0] - near[0], nxt[1] - near[1]
+            if dy > abs(dx):
+                into_valve = True            # attaches from below: inlet
+            elif abs(dx) > abs(dy):
+                into_valve = False           # horizontal: outlet
+            else:
+                continue                     # rises above: bonnet/vent stub
+            if (r["a"] == n["id"]) == into_valve:
+                set_dir(r, "ba", "psv")
+            else:
+                set_dir(r, "ab", "psv")
 
     # --- propagation through pass-through nodes -----------------------------
     # A junction passes flow straight through when it has exactly two REAL

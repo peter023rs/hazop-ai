@@ -12,6 +12,7 @@ import json
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
 from hazop.l3_reasoner.reasoner.core import AIReasoner
 from hazop.l3_reasoner.reasoner.critic import critique
+from hazop.l3_reasoner.reasoner.evidence_critic import LexicalEvidenceCritic
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
 from hazop.l3_reasoner.reasoner.llm import StubLLM
 
@@ -25,6 +26,7 @@ def main():
         retriever=MockRetriever(),
         llm=StubLLM(),
         grounding_required=True,
+        evidence_critic=LexicalEvidenceCritic(),
     )
 
     rows = reasoner.analyze_node(node)
@@ -53,8 +55,10 @@ def main():
         for s in d["safeguards"]:
             print(f"    - {fmt(s)}")
         for rej in d["rejected_findings"]:
-            print(f"  REJECTED ({rej['kind']}, invalid tags "
-                  f"{rej['invalid_tags']}): {rej['text']}")
+            why = (f"invalid tags {rej['invalid_tags']}"
+                   if rej["reason"] == "invalid_tags"
+                   else f"contradicted by {rej['failed_evidence']}")
+            print(f"  REJECTED ({rej['kind']}, {why}): {rej['text']}")
         print(f"  Risk rating: severity={d['severity']} likelihood={d['likelihood']} "
               f"(human-only field, intentionally blank)")
 

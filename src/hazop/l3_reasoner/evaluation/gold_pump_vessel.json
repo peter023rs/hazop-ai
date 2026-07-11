@@ -19,7 +19,7 @@
       "causes": [
         {
           "description": "Pump P-101 trips",
-          "match_any": [["pump trip"]]
+          "match_any": [["pump trip"], ["pump", "trip"]]
         },
         {
           "description": "Suction valve V-SUCT closed in error",
@@ -49,7 +49,8 @@
       "causes": [
         {
           "description": "Pump trip with downstream pressure above discharge",
-          "match_any": [["pump trip"]]
+          "match_any": [["pump trip"], ["pump", "trip"],
+                        ["downstream pressure", "trip"]]
         }
       ],
       "consequences": [
@@ -69,7 +70,8 @@
       "causes": [
         {
           "description": "Blocked or restricted outlet with pump running",
-          "match_any": [["blocked outlet"], ["blocked/restricted outlet"]]
+          "match_any": [["blocked outlet"], ["blocked/restricted outlet"],
+                        ["blocked", "outlet"]]
         },
         {
           "description": "Thermal expansion of blocked-in liquid",

@@ -47,6 +47,10 @@ class Finding:
     # MDL-3) rather than retrieved document evidence. Such findings count as
     # supported even with no document evidence attached.
     topology_grounded: bool = False
+    # Stage B audit trail (DDR-02): one dict per originally-cited excerpt,
+    # {"evidence_id", "verdict", "rationale"} — kept even for citations the
+    # evidence critic stripped, so every verdict stays reviewable.
+    evidence_checks: list[dict] = field(default_factory=list)
 
     @property
     def is_supported(self) -> bool:
@@ -67,27 +71,34 @@ class Finding:
             "topology_grounded": self.topology_grounded,
             "supported": self.is_supported,
             "provenance": self.provenance.value,
+            "evidence_checks": self.evidence_checks,
         }
 
 
 @dataclass
 class RejectedFinding:
     """
-    Audit record for a finding rejected by the tag-grounding gate
-    (FR-ARE-9 / MDL-10). Rejected content is excluded from the worksheet
-    body but never silently lost (NFR-S-01 auditability) — it is what the
-    hallucination-rate evaluation counts.
+    Audit record for a finding rejected by either critic stage: Stage A,
+    the tag-grounding gate (FR-ARE-9 / MDL-10, reason="invalid_tags"), or
+    Stage B, the evidence critic (DDR-02 / MDL-11,
+    reason="evidence_contradicted"). Rejected content is excluded from the
+    worksheet body but never silently lost (NFR-S-01 auditability) — it is
+    what the hallucination/fabrication-rate evaluations count.
     """
     kind: str                 # "cause" | "consequence" | "safeguard"
     text: str
-    invalid_tags: list[str]   # the tags that do not exist in the topology
-    confidence: float
+    invalid_tags: list[str] = field(default_factory=list)  # Stage A: tags not in topology
+    confidence: float = 0.0
+    reason: str = "invalid_tags"
+    failed_evidence: list[str] = field(default_factory=list)  # Stage B: contradicted ids
 
     def to_dict(self) -> dict:
         return {
             "kind": self.kind,
             "text": self.text,
+            "reason": self.reason,
             "invalid_tags": self.invalid_tags,
+            "failed_evidence": self.failed_evidence,
             "confidence": round(self.confidence, 3),
         }
 

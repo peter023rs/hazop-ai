@@ -1,0 +1,755 @@
+{
+  "meta": {
+    "source_document": "hazop_ai_Fable-Englishpdf.pdf (Model Development Requirements Document, draft 0.1)",
+    "statuses": [
+      "done",
+      "partial",
+      "todo",
+      "blocked",
+      "out_of_scope"
+    ],
+    "first_pass_author": "claude (2026-07-10) — statuses are a first-pass assessment against the hazop-ai codebase; review and correct",
+    "note": "This file is the RTM source of truth (Fable section 9: controlled deliverable). Auto-scanned code citations are merged in by hazop/rtm.py at read time and are not stored here."
+  },
+  "requirements": [
+    {
+      "id": "AR-1",
+      "section": "2.2 Architecture",
+      "text": "Strict data-level separation of AI-generated vs human-validated content; every record carries provenance.",
+      "status": "done",
+      "notes": "Provenance enum on findings/rows; telemetry encodes the accepted/edited transitions.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/worksheet.py",
+        "src/hazop/telemetry.py"
+      ]
+    },
+    {
+      "id": "AR-2",
+      "section": "2.2 Architecture",
+      "text": "Degraded manual mode: full worksheet functionality without AI if AI services are unavailable.",
+      "status": "todo",
+      "notes": "No manual worksheet authoring UI exists; the dashboard worksheet is generator-driven.",
+      "evidence": []
+    },
+    {
+      "id": "AR-3",
+      "section": "2.2 Architecture",
+      "text": "AI inference deployable on-prem / customer-controlled tenancy; no third-party transmission without explicit config.",
+      "status": "done",
+      "notes": "LocalLLM + LocalEvidenceCritic over OpenAI-compatible servers; Anthropic branch is opt-in config. Legal-review step is organizational.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/llm.py",
+        "src/hazop/l3_reasoner/reasoner/evidence_critic.py"
+      ]
+    },
+    {
+      "id": "AR-4",
+      "section": "2.2 Architecture",
+      "text": "Air-gapped deployment supported.",
+      "status": "partial",
+      "notes": "Stub/local paths run fully offline and Docker image exists, but no validated air-gapped install procedure.",
+      "evidence": [
+        "Dockerfile",
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "id": "AR-5",
+      "section": "2.2 Architecture",
+      "text": "Versioned APIs on all subsystems; AI Reasoning Engine swappable behind a model-agnostic layer.",
+      "status": "partial",
+      "notes": "LLMInterface/RetrieverInterface/EvidenceCriticInterface seams make the ARE swappable; no versioned inter-subsystem APIs.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/llm.py",
+        "src/hazop/l3_reasoner/reasoner/schema.py"
+      ]
+    },
+    {
+      "id": "FR-DIM-1",
+      "section": "3.1 Document Intelligence",
+      "text": "Ingest P&IDs in native CAD (DWG/DGN), intelligent formats (SPPID/AVEVA/DEXPI), and scanned PDF/raster.",
+      "status": "partial",
+      "notes": "Vector-PDF ingestion done (deterministic geometry); DEXPI export done. DWG/DGN import and raster ingestion absent.",
+      "evidence": [
+        "src/hazop/l1_extraction/pipeline.py",
+        "src/hazop/l1_extraction/export_dexpi.py"
+      ]
+    },
+    {
+      "id": "FR-DIM-2",
+      "section": "3.1 Document Intelligence",
+      "text": "Intelligent P&ID formats: extract topology with >= 99% fidelity to source data model.",
+      "status": "partial",
+      "notes": "DEXPI/ISO 15926 canonical model exists; no SPPID/AVEVA importers to measure fidelity against.",
+      "evidence": [
+        "src/hazop/l1_extraction/export_pydexpi_native.py"
+      ]
+    },
+    {
+      "id": "FR-DIM-3",
+      "section": "3.1 Document Intelligence",
+      "text": "Raster/scanned P&IDs: symbol recognition + line tracing with per-class precision/recall targets (ISA 5.1).",
+      "status": "todo",
+      "notes": "Current L1 is deliberately vector-only (no ML/OCR). Raster path = MDL-4 training-data plan; not started.",
+      "evidence": []
+    },
+    {
+      "id": "FR-DIM-4",
+      "section": "3.1 Document Intelligence",
+      "text": "Ingest supporting documents (datasheets, setpoint lists, C&E, relief datasheets, MSDS/SDS, procedures) and link attributes to topology.",
+      "status": "partial",
+      "notes": "KB ingests curated SDS/datasheet/standard docs; automatic attribute-to-topology-element linking absent.",
+      "evidence": [
+        "src/hazop/l2_knowledge/kb"
+      ]
+    },
+    {
+      "id": "FR-DIM-5",
+      "section": "3.1 Document Intelligence",
+      "text": "Detect and flag cross-document inconsistencies (e.g. PSV set pressure vs vessel MAWP).",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-DIM-6",
+      "section": "3.1 Document Intelligence",
+      "text": "All extracted data human-verifiable via side-by-side view with one-click correction.",
+      "status": "partial",
+      "notes": "L1 overlay sheets in dashboard + standalone validator app (hazop_L1 app.py :8777) with accept/reject; one-click correction flow incomplete.",
+      "evidence": [
+        "src/hazop/l1_extraction/app.py",
+        "src/hazop/web/app.py"
+      ]
+    },
+    {
+      "id": "FR-PML-1",
+      "section": "3.2 Process Model Layer",
+      "text": "Directed process graph supporting upstream/downstream tracing, isolation boundaries, flow-path enumeration.",
+      "status": "done",
+      "notes": "Direction-confidence-aware tracing; live in the Plant Graph tab.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/topology.py",
+        "src/hazop/l2_knowledge/plant_graph"
+      ]
+    },
+    {
+      "id": "FR-PML-2",
+      "section": "3.2 Process Model Layer",
+      "text": "Propose HAZOP node boundaries from design-intent changes, subject to facilitator approval.",
+      "status": "done",
+      "notes": "Type-level design-intent rules propose nodes, ambiguities flagged for facilitator; proposals labeled as proposals.",
+      "evidence": [
+        "src/hazop/l2_knowledge"
+      ]
+    },
+    {
+      "id": "FR-PML-3",
+      "section": "3.2 Process Model Layer",
+      "text": "Integrate >= 1 steady-state simulator (HYSYS target, DWSIM fallback) for deviation screening.",
+      "status": "todo",
+      "notes": "Screening seam exists; DWSIM adapter is the planned next step.",
+      "evidence": []
+    },
+    {
+      "id": "FR-PML-4",
+      "section": "3.2 Process Model Layer",
+      "text": "Simulation-derived screens labeled with case ID, model version, convergence status; unreliable results flagged.",
+      "status": "todo",
+      "notes": "Blocked on FR-PML-3; labeling pattern already proven on the heuristic path.",
+      "evidence": []
+    },
+    {
+      "id": "FR-PML-5",
+      "section": "3.2 Process Model Layer",
+      "text": "Heuristic fallback where no simulation model exists, clearly labeled as estimates.",
+      "status": "done",
+      "notes": "Deadhead/compressor heuristics emit ESTIMATE labels with reliable=False.",
+      "evidence": [
+        "src/hazop/l2_knowledge"
+      ]
+    },
+    {
+      "id": "FR-ARE-1",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Full IEC 61882 guideword set per parameter, filtered only for physical applicability; hazards never suppressed.",
+      "status": "done",
+      "notes": "Deterministic matrix; check-valve case raised as deviation with safeguard, never hidden.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/guidewords.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-2",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Ranked candidate causes grounded in topology, KB failure modes (OREDA-type), historical HAZOP RAG, incident precedents.",
+      "status": "partial",
+      "notes": "Topology + hybrid RAG + historical precedents done; OREDA reliability categories and licensed incident DBs (CSB/IChemE/Marsh) absent.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/core.py",
+        "src/hazop/l2_knowledge/kb"
+      ]
+    },
+    {
+      "id": "FR-ARE-3",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Consequences propagated through the topology graph, citing the graph path and any simulation screen used.",
+      "status": "partial",
+      "notes": "Topology propagation primitives + consequence generation exist; explicit graph-path citation inside consequence text is thin; no simulation screens yet.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/topology.py",
+        "src/hazop/l3_reasoner/reasoner/core.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-4",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Safeguards from topology and C&E data; distinguish prevention vs mitigation; flag IPL candidates.",
+      "status": "partial",
+      "notes": "Topology-derived safeguards (relief path, check valves) done with direction-confidence; C&E ingestion and prevention/mitigation/IPL classification absent.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/core.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-5",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Every suggestion carries confidence, explicit evidence citations, and NL rationale; no-evidence suggestions labeled unsupported inference.",
+      "status": "done",
+      "notes": "Composed confidence (never model self-report), citations survive export, UNSUPPORTED INFERENCE labeling.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-6",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "No auto-populated risk rankings; severity/likelihood human-only.",
+      "status": "done",
+      "notes": "Severity/likelihood left None by construction.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-7",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Natural-language facilitator prompts returning structured worksheet-ready entries.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-ARE-8",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Completeness critic pass at node close-out: matrix coverage, sibling nodes, precedent comparison, gap list.",
+      "status": "done",
+      "notes": "Matrix-coverage + no-consequence + low-confidence + unsupported channels done and MDL-13-gated at 100%; sibling/precedent comparison is a future extension.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/critic.py",
+        "src/hazop/l3_reasoner/evaluation/seeded_omissions.py"
+      ]
+    },
+    {
+      "id": "FR-ARE-9",
+      "section": "3.3 AI Reasoning Engine",
+      "text": "Hallucination controls: tag validation against topology, schema-constrained generation, refusal over fabrication.",
+      "status": "done",
+      "notes": "Stage A hard gate + JSON-schema outputs + refusal handling + Stage B evidence critic.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/core.py",
+        "src/hazop/l3_reasoner/reasoner/evidence_critic.py"
+      ]
+    },
+    {
+      "id": "FR-SW-1",
+      "section": "3.4 Study Workspace",
+      "text": "Live facilitation view with suggestions tray; accept/edit/reject; never auto-inserted into the official worksheet.",
+      "status": "partial",
+      "notes": "Worksheet view with per-finding accept/edit/reject buttons exists; a true suggestions-tray -> official-worksheet flow does not.",
+      "evidence": [
+        "src/hazop/web/templates/index.html"
+      ]
+    },
+    {
+      "id": "FR-SW-2",
+      "section": "3.4 Study Workspace",
+      "text": "Accept/edit/reject logged with user identity and timestamp (doubles as training/eval signal).",
+      "status": "done",
+      "notes": "Append-only JSONL with identity, timestamp, version triplet; UI wired. User identity is a placeholder until auth (FR-AGM-1) exists.",
+      "evidence": [
+        "src/hazop/telemetry.py",
+        "src/hazop/web/app.py"
+      ]
+    },
+    {
+      "id": "FR-SW-3",
+      "section": "3.4 Study Workspace",
+      "text": "Standard worksheet columns incl. S/L/R per configurable risk matrix, configurable templates.",
+      "status": "partial",
+      "notes": "Standard columns present; customer-configurable templates and risk-matrix config absent.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+      ]
+    },
+    {
+      "id": "FR-SW-4",
+      "section": "3.4 Study Workspace",
+      "text": "Session management: attendance, minutes, parking lot, revisit flags, progress metrics.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-SW-5",
+      "section": "3.4 Study Workspace",
+      "text": "Offline/disconnected session capture with later synchronization.",
+      "status": "todo",
+      "notes": "Telemetry endpoint accepts client-supplied ids/timestamps (sync-friendly); worksheet offline capture absent.",
+      "evidence": []
+    },
+    {
+      "id": "FR-SW-6",
+      "section": "3.4 Study Workspace",
+      "text": "Concurrent multi-user editing with scribe-holds-the-pen conflict rules.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-RCM-1",
+      "section": "3.5 Reporting & Compliance",
+      "text": "IEC 61882-conformant report generation (DOCX/PDF/XLSX).",
+      "status": "todo",
+      "notes": "Structured JSON export only.",
+      "evidence": []
+    },
+    {
+      "id": "FR-RCM-2",
+      "section": "3.5 Reporting & Compliance",
+      "text": "Full revision history of every worksheet entry incl. original AI text (immutable audit trail).",
+      "status": "partial",
+      "notes": "Original suggestion text retained in telemetry events; rejected findings kept as audit records; no full worksheet revision store.",
+      "evidence": [
+        "src/hazop/telemetry.py",
+        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+      ]
+    },
+    {
+      "id": "FR-RCM-3",
+      "section": "3.5 Reporting & Compliance",
+      "text": "Export action items to common trackers (CSV/REST) and track closure evidence for PSM revalidation.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-RCM-4",
+      "section": "3.5 Reporting & Compliance",
+      "text": "Study provenance annex: model/prompt/KB versions and aggregate suggestion statistics.",
+      "status": "partial",
+      "notes": "Version triplet + accept/edit/reject stats captured per event; annex document generator absent.",
+      "evidence": [
+        "src/hazop/telemetry.py"
+      ]
+    },
+    {
+      "id": "FR-RCM-5",
+      "section": "3.5 Reporting & Compliance",
+      "text": "Revalidation workflows: clone prior study, diff against updated P&IDs (MOC-driven), highlight affected nodes.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "FR-AGM-1",
+      "section": "3.6 Admin & Governance",
+      "text": "Role-based access control mapped to study roles; sign-off restricted to facilitator.",
+      "status": "todo",
+      "notes": "No auth/roles anywhere yet.",
+      "evidence": []
+    },
+    {
+      "id": "FR-AGM-2",
+      "section": "3.6 Admin & Governance",
+      "text": "KB curation workflow: review queue, only curator-approved content retrievable, items carry source/date/applicability/confidentiality.",
+      "status": "partial",
+      "notes": "Curation gates enforced at ingestion (approved-only indexed; pending + gold-holdout excluded); item metadata present; curator review-queue UI absent.",
+      "evidence": [
+        "src/hazop/l2_knowledge/kb",
+        "data/corpus"
+      ]
+    },
+    {
+      "id": "FR-AGM-3",
+      "section": "3.6 Admin & Governance",
+      "text": "Model governance: versioned models/prompts/retrieval configs; studies pin versions; mid-study upgrades need facilitator acknowledgment.",
+      "status": "partial",
+      "notes": "Versions carried in telemetry; no pinning enforcement or upgrade-acknowledgment flow.",
+      "evidence": [
+        "src/hazop/telemetry.py"
+      ]
+    },
+    {
+      "id": "MDL-1",
+      "section": "4. Model Development",
+      "text": "Foundation LLM (commercial or self-hosted), no fine-tuning on customer data in v1; RAG + prompt engineering.",
+      "status": "done",
+      "notes": "Anthropic + OpenAI-compatible local + deterministic stub behind one seam.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/llm.py"
+      ]
+    },
+    {
+      "id": "MDL-2",
+      "section": "4. Model Development",
+      "text": "Hybrid dense + lexical retrieval with metadata filtering; embedding choice a documented deliverable.",
+      "status": "done",
+      "notes": "BM25 + dense with RRF fusion, guideword/parameter filters; hashing-stub embedder default, sentence-transformers optional.",
+      "evidence": [
+        "src/hazop/l2_knowledge/kb"
+      ]
+    },
+    {
+      "id": "MDL-3",
+      "section": "4. Model Development",
+      "text": "Topology reasoner as deterministic graph algorithms — ML prohibited where exact solutions exist.",
+      "status": "done",
+      "notes": "",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/topology.py"
+      ]
+    },
+    {
+      "id": "MDL-4",
+      "section": "4. Model Development",
+      "text": "Vision/document models: P&ID symbol detection + OCR with training-data plan (incl. synthetic P&IDs).",
+      "status": "partial",
+      "notes": "Vector drawings handled deterministically without ML (stronger guarantee where applicable); ML/OCR raster path + training-data plan not started.",
+      "evidence": [
+        "src/hazop/l1_extraction"
+      ]
+    },
+    {
+      "id": "MDL-5",
+      "section": "4. Model Development",
+      "text": "Critic/verifier models: secondary pass validating schema, topology, evidence grounding before display.",
+      "status": "done",
+      "notes": "Two-stage: Stage A tag grounding (deterministic) + Stage B evidence critic (different model than generator).",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/evidence_critic.py",
+        "src/hazop/l3_reasoner/reasoner/core.py"
+      ]
+    },
+    {
+      "id": "MDL-6",
+      "section": "4. Model Development",
+      "text": "Curated eval corpus before model development: >= 10 historical HAZOP studies across >= 3 unit types.",
+      "status": "todo",
+      "notes": "Data-bound: collect public studies (Crawley & Tyler, CSB, CCPS).",
+      "evidence": []
+    },
+    {
+      "id": "MDL-7",
+      "section": "4. Model Development",
+      "text": "Gold-standard test set: >= 20 nodes with expert reference worksheets, held out from retrieval.",
+      "status": "partial",
+      "notes": "Format + loader + hold-out enforcement done; 1 node authored, 19+ to go.",
+      "evidence": [
+        "src/hazop/l3_reasoner/evaluation/gold.py",
+        "src/hazop/l3_reasoner/evaluation/gold_pump_vessel.json"
+      ]
+    },
+    {
+      "id": "MDL-8",
+      "section": "4. Model Development",
+      "text": "Data licensing and confidentiality review as gating milestone.",
+      "status": "todo",
+      "notes": "Provenance-log column planned in corpus manifest.",
+      "evidence": []
+    },
+    {
+      "id": "MDL-9",
+      "section": "4. Model Development",
+      "text": "Cause recall >= 80% in top-10 on gold set.",
+      "status": "partial",
+      "notes": "Harness + CI gate done; 100% on mock/1-node gold. Real number needs MDL-7 gold set + real generator.",
+      "evidence": [
+        "src/hazop/l3_reasoner/evaluation/metrics.py"
+      ]
+    },
+    {
+      "id": "MDL-10",
+      "section": "4. Model Development",
+      "text": "Grounding precision >= 98%: referenced tags must exist in topology (hard gate, blocks release).",
+      "status": "done",
+      "notes": "In-pipeline hard gate + independent output-side audit; fabricating-LLM test proves the gate.",
+      "evidence": [
+        "src/hazop/l3_reasoner/reasoner/core.py",
+        "src/hazop/l3_reasoner/evaluation/grounding.py"
+      ]
+    },
+    {
+      "id": "MDL-11",
+      "section": "4. Model Development",
+      "text": "Fabrication rate < 1% (citations that do not support the claim), by expert audit of sampled output.",
+      "status": "partial",
+      "notes": "Automated proxies + deterministic expert audit sheet done; the human audit itself pending.",
+      "evidence": [
+        "src/hazop/l3_reasoner/evaluation/fabrication.py",
+        "outputs/mdl11_audit_sheet.csv"
+      ]
+    },
+    {
+      "id": "MDL-12",
+      "section": "4. Model Development",
+      "text": "Latency <= 10 s per deviation at P95 in live-session mode.",
+      "status": "partial",
+      "notes": "Harness done (nearest-rank P95, injectable clock); real number needs a real-generator run.",
+      "evidence": [
+        "src/hazop/l3_reasoner/evaluation/latency.py"
+      ]
+    },
+    {
+      "id": "MDL-13",
+      "section": "4. Model Development",
+      "text": "Critic detects >= 90% of deliberately seeded worksheet omissions.",
+      "status": "done",
+      "notes": "Seeding harness + CI gate; deterministic critic at 100% (60/60), pinned.",
+      "evidence": [
+        "src/hazop/l3_reasoner/evaluation/seeded_omissions.py"
+      ]
+    },
+    {
+      "id": "MDL-14",
+      "section": "4. Model Development",
+      "text": "Accept/edit/reject telemetry in a schema fit for offline eval / preference tuning; training use needs customer opt-in.",
+      "status": "done",
+      "notes": "Versioned JSONL schema + web endpoints + UI buttons, verified end to end.",
+      "evidence": [
+        "src/hazop/telemetry.py",
+        "src/hazop/web/app.py"
+      ]
+    },
+    {
+      "id": "DR-1",
+      "section": "5. Data Requirements",
+      "text": "Canonical data model based on DEXPI / ISO 15926; vendor mapping tables are deliverables.",
+      "status": "done",
+      "notes": "L1 exports DEXPI-shaped plant model; L2 consumes it. Vendor mapping tables pending vendor formats.",
+      "evidence": [
+        "src/hazop/l1_extraction/export_dexpi.py",
+        "src/hazop/l2_knowledge/plant_graph"
+      ]
+    },
+    {
+      "id": "DR-2",
+      "section": "5. Data Requirements",
+      "text": "Risk matrix definitions as customer-configurable data, not code.",
+      "status": "todo",
+      "notes": "Risk ranking not yet implemented anywhere (FR-ARE-6 keeps it human-only).",
+      "evidence": []
+    },
+    {
+      "id": "DR-3",
+      "section": "5. Data Requirements",
+      "text": "Encryption at rest (AES-256) and in transit (TLS 1.2+); per-customer segregation.",
+      "status": "todo",
+      "notes": "Dev-server posture only.",
+      "evidence": []
+    },
+    {
+      "id": "DR-4",
+      "section": "5. Data Requirements",
+      "text": "Retention >= PSM revalidation cycle + legal hold; deletion needs dual authorization and logging.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "DR-5",
+      "section": "5. Data Requirements",
+      "text": "Export-control tagging on KB items and studies, with access filtering enforced.",
+      "status": "partial",
+      "notes": "KB items carry confidentiality classification; access filtering absent (needs FR-AGM-1 auth).",
+      "evidence": [
+        "data/corpus"
+      ]
+    },
+    {
+      "id": "NFR-1",
+      "section": "6. Non-Functional",
+      "text": "Availability 99.5% hosted; manual mode always available.",
+      "status": "todo",
+      "notes": "Tied to AR-2 + deployment work.",
+      "evidence": []
+    },
+    {
+      "id": "NFR-2",
+      "section": "6. Non-Functional",
+      "text": "Scalability: 500+ node studies, 50,000+ worksheet rows without UI degradation.",
+      "status": "todo",
+      "notes": "Untested at that scale.",
+      "evidence": []
+    },
+    {
+      "id": "NFR-3",
+      "section": "6. Non-Functional",
+      "text": "Usability: scribe processes accept/edit/reject at live-meeting pace; <= 2 interactions per accepted suggestion.",
+      "status": "todo",
+      "notes": "One-click accept exists in the dashboard demo; the metric needs the real workspace + a trained scribe.",
+      "evidence": []
+    },
+    {
+      "id": "NFR-4",
+      "section": "6. Non-Functional",
+      "text": "Security: SSO (SAML/OIDC), RBAC, audit logging, annual pen test.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "NFR-5",
+      "section": "6. Non-Functional",
+      "text": "Portability: on-prem containerized, private cloud, air-gapped variants.",
+      "status": "partial",
+      "notes": "Dockerized; on-prem LLM path exists; air-gap unvalidated.",
+      "evidence": [
+        "Dockerfile",
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "id": "NFR-6",
+      "section": "6. Non-Functional",
+      "text": "Internationalization: English v1; architecture must not preclude additional languages.",
+      "status": "done",
+      "notes": "English throughout; nothing language-bound in the data model.",
+      "evidence": []
+    },
+    {
+      "id": "NFR-7",
+      "section": "6. Non-Functional",
+      "text": "Accessibility: WCAG 2.1 AA for the study workspace.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "NFR-8",
+      "section": "6. Non-Functional",
+      "text": "Maintainability: prompts, guideword sets, heuristics as versioned configuration, not code.",
+      "status": "todo",
+      "notes": "Currently Python constants/prompts in code; needs externalizing.",
+      "evidence": []
+    },
+    {
+      "id": "VV-1",
+      "section": "7. Verification & Validation",
+      "text": "Model performance claims verified by HAZOP-qualified reviewers not involved in development.",
+      "status": "todo",
+      "notes": "All current numbers are harness-validation on deterministic doubles, flagged as such.",
+      "evidence": []
+    },
+    {
+      "id": "VV-2",
+      "section": "7. Verification & Validation",
+      "text": ">= 2 shadow-mode pilots with blinded comparison, then >= 1 assisted-mode pilot before GA.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "VV-3",
+      "section": "7. Verification & Validation",
+      "text": "Failure-mode analysis of the tool itself (automation bias, anchoring, coverage illusion) with mitigations.",
+      "status": "todo",
+      "notes": "Mitigations designed in DDR docs (e.g. tray randomization); the structured assessment not performed.",
+      "evidence": []
+    },
+    {
+      "id": "VV-4",
+      "section": "7. Verification & Validation",
+      "text": "Release acceptance: all 4.3 hard gates met; zero critical audit-trail defects; regulatory package complete.",
+      "status": "todo",
+      "notes": "Scorecard automates the 4.3 gate check; rest pending.",
+      "evidence": [
+        "src/hazop/l3_reasoner/mdl_scorecard.py"
+      ]
+    },
+    {
+      "id": "VV-5",
+      "section": "7. Verification & Validation",
+      "text": "Regulatory positioning package: written analysis that team responsibility and PHA obligations are unchanged.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "C-1",
+      "section": "8. Constraints & Assumptions",
+      "text": "Constraint: tool is advisory; never marketed/configured as replacing the HAZOP team or facilitator judgment.",
+      "status": "done",
+      "notes": "Advisory framing enforced in code (human-only rankings, proposals labeled, provenance).",
+      "evidence": []
+    },
+    {
+      "id": "C-2",
+      "section": "8. Constraints & Assumptions",
+      "text": "Constraint: not a safety-related system under IEC 61511; no SIS/real-time control functionality.",
+      "status": "done",
+      "notes": "No control-system surface exists; claims avoided.",
+      "evidence": []
+    },
+    {
+      "id": "A-1",
+      "section": "8. Constraints & Assumptions",
+      "text": "Assumption: customers can provide machine-readable or scannable P&IDs and partial instrument index.",
+      "status": "done",
+      "notes": "Held for the 2401 unit (vector P&ID + instrument index extracted).",
+      "evidence": [
+        "data/l1_output"
+      ]
+    },
+    {
+      "id": "A-2",
+      "section": "8. Constraints & Assumptions",
+      "text": "Assumption: at least one anchor customer provides historical studies for KB seeding under NDA.",
+      "status": "todo",
+      "notes": "No anchor customer; public-source corpus is the interim plan (MDL-6).",
+      "evidence": []
+    },
+    {
+      "id": "OI-1",
+      "section": "8. Open Issues",
+      "text": "Liability allocation and contract language for AI-assisted safety studies (legal).",
+      "status": "todo",
+      "notes": "Requires legal counsel; blocks design freeze per the draft.",
+      "evidence": []
+    },
+    {
+      "id": "OI-2",
+      "section": "8. Open Issues",
+      "text": "Whether simulation integration (FR-PML-3) is v1 or v1.1 scope (cost/schedule).",
+      "status": "todo",
+      "notes": "Current plan: DWSIM adapter next in L2.",
+      "evidence": []
+    },
+    {
+      "id": "OI-3",
+      "section": "8. Open Issues",
+      "text": "Commercial licensing of incident databases for the KB.",
+      "status": "todo",
+      "notes": "",
+      "evidence": []
+    },
+    {
+      "id": "OI-4",
+      "section": "8. Open Issues",
+      "text": "On-prem LLM sizing vs quality trade-off for air-gapped customers.",
+      "status": "todo",
+      "notes": "LocalLLM/LocalEvidenceCritic default to small Ollama models; sizing study not done.",
+      "evidence": []
+    }
+  ]
+}

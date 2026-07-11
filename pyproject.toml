@@ -18,6 +18,8 @@ dependencies = [
 neo4j = ["neo4j>=5.0"]
 # Real Anthropic model client (L3 reasoner.llm.AnthropicLLM); the stub needs nothing
 llm = ["anthropic>=0.40"]
+# Real dense retrieval (L2 kb.embed.SentenceTransformerEmbedder); the hashing stub needs nothing
+embed = ["sentence-transformers>=3.0"]
 # DEXPI native export (L1 export_pydexpi_native)
 dexpi = ["pydexpi"]
 dev = ["pytest>=7.0"]

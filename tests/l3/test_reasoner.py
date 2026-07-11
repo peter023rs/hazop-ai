@@ -364,3 +364,167 @@ class TestCritic(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestParallelFanOut(unittest.TestCase):
+    """DDR-11 / MDL-12: deviations fan out across workers with results
+    identical to (and ordered like) the serial run."""
+
+    class _SlowLLM(StubLLM):
+        def __init__(self):
+            import threading
+            self.lock = threading.Lock()
+            self.active = 0
+            self.max_active = 0
+
+        def generate_findings(self, deviation, node_context, evidence):
+            import time
+            with self.lock:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            time.sleep(0.01)
+            try:
+                return super().generate_findings(deviation, node_context,
+                                                 evidence)
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+    def _reasoner(self, llm, workers):
+        from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
+        return AIReasoner(topology=build_topology(),
+                          retriever=MockRetriever(), llm=llm,
+                          max_workers=workers)
+
+    def test_parallel_matches_serial(self):
+        node = build_study_node()
+        serial = self._reasoner(StubLLM(), 1).analyze_node(node)
+        parallel = self._reasoner(StubLLM(), 8).analyze_node(node)
+        self.assertEqual([r.deviation.label for r in serial],
+                         [r.deviation.label for r in parallel])
+        self.assertEqual([r.to_dict() for r in serial],
+                         [r.to_dict() for r in parallel])
+
+    def test_deviations_actually_overlap(self):
+        llm = self._SlowLLM()
+        self._reasoner(llm, 8).analyze_node(build_study_node())
+        self.assertGreater(llm.max_active, 1)
+
+    def test_serial_never_overlaps(self):
+        llm = self._SlowLLM()
+        self._reasoner(llm, 1).analyze_node(build_study_node())
+        self.assertEqual(llm.max_active, 1)
+
+
+class TestLocalLLM(unittest.TestCase):
+    """LocalLLM / OpenAICompatClient against a fake transport — the
+    on-prem branch of DDR-06. No server, no network."""
+
+    @staticmethod
+    def _client(responses):
+        """Fake transport returning canned OpenAI-style responses."""
+        from hazop.l3_reasoner.reasoner.llm import OpenAICompatClient
+        import json as _json
+        calls = []
+
+        def transport(url, payload):
+            calls.append((url, payload))
+            body, finish = responses[min(len(calls), len(responses)) - 1]
+            text = body if isinstance(body, str) else _json.dumps(body)
+            return {"choices": [{"finish_reason": finish,
+                                 "message": {"content": text}}]}
+
+        client = OpenAICompatClient(transport=transport)
+        return client, calls
+
+    @staticmethod
+    def _payload():
+        return {"causes": [{"text": "Blocked outlet.",
+                            "referenced_tags": ["P-101"],
+                            "evidence_ids": ["DOC-1#a", "GHOST"]}],
+                "consequences": [{"text": "Overpressure.",
+                                  "referenced_tags": [],
+                                  "evidence_ids": []}],
+                "safeguards": []}
+
+    def _generate(self, client):
+        from hazop.l3_reasoner.reasoner.llm import LocalLLM
+        from hazop.l3_reasoner.reasoner.guidewords import deviations_for_parameter
+        from hazop.l3_reasoner.reasoner.schema import RetrievedEvidence
+        dev = next(d for d in deviations_for_parameter(Parameter.PRESSURE)
+                   if d.label == "More Pressure")
+        ev = [RetrievedEvidence(source_id="DOC-1#a", source_type="standard",
+                                snippet="Blocked outlet causes overpressure.",
+                                score=0.9)]
+        return LocalLLM(client=client).generate_findings(
+            dev, {"node_id": "N", "equipment_tags": ["P-101"],
+                  "design_intent": "x"}, ev)
+
+    def test_parses_and_composes_like_the_cloud_client(self):
+        client, calls = self._client([(self._payload(), "stop")])
+        triple = self._generate(client)
+        self.assertEqual(triple.causes[0].evidence_ids, ["DOC-1#a"])  # GHOST dropped
+        self.assertEqual(triple.causes[0].confidence, 0.55)   # composed
+        self.assertEqual(triple.consequences[0].confidence, 0.30)
+        # request used OpenAI-style structured output, local URL only
+        url, payload = calls[0]
+        self.assertIn("localhost", url)
+        self.assertEqual(payload["response_format"]["type"], "json_schema")
+        self.assertNotIn("confidence",
+                         str(payload["response_format"]["json_schema"]))
+
+    def test_invalid_json_retried_once_then_refused(self):
+        client, calls = self._client([("not json {", "stop"),
+                                      (self._payload(), "stop")])
+        triple = self._generate(client)                       # retry succeeds
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(triple.causes[0].text, "Blocked outlet.")
+        # feedback loop carried the parse error back to the model
+        self.assertIn("not valid JSON", calls[1][1]["messages"][-1]["content"])
+
+        client, calls = self._client([("nope", "stop"), ("nope", "stop")])
+        with self.assertRaises(RuntimeError):                 # then refuse
+            self._generate(client)
+        self.assertEqual(len(calls), 2)
+
+    def test_truncation_refused_not_repaired(self):
+        client, _ = self._client([(self._payload(), "length")])
+        with self.assertRaises(RuntimeError):
+            self._generate(client)
+
+
+class TestLocalEvidenceCritic(unittest.TestCase):
+    def _critic(self, responses):
+        from hazop.l3_reasoner.reasoner.evidence_critic import LocalEvidenceCritic
+        import json as _json
+
+        def transport(url, payload):
+            body, finish = responses.pop(0)
+            text = body if isinstance(body, str) else _json.dumps(body)
+            return {"choices": [{"finish_reason": finish,
+                                 "message": {"content": text}}]}
+
+        from hazop.l3_reasoner.reasoner.llm import OpenAICompatClient
+        return LocalEvidenceCritic(client=OpenAICompatClient(
+            transport=transport))
+
+    @staticmethod
+    def _evidence():
+        from hazop.l3_reasoner.reasoner.schema import RetrievedEvidence
+        return [RetrievedEvidence(source_id="A#1", source_type="standard",
+                                  snippet="text", score=0.5)]
+
+    def test_verdicts_parsed(self):
+        from hazop.l3_reasoner.reasoner.evidence_critic import EvidenceVerdict
+        critic = self._critic([({"checks": [
+            {"evidence_id": "A#1", "verdict": "contradicted",
+             "rationale": "says the opposite"}]}, "stop")])
+        checks = critic.check_claim("Claim.", self._evidence())
+        self.assertEqual(checks[0].verdict, EvidenceVerdict.CONTRADICTED)
+
+    def test_critic_failure_abstains_never_supports(self):
+        from hazop.l3_reasoner.reasoner.evidence_critic import EvidenceVerdict
+        critic = self._critic([("bad", "stop"), ("bad", "stop")])
+        checks = critic.check_claim("Claim.", self._evidence())
+        self.assertEqual([c.verdict for c in checks],
+                         [EvidenceVerdict.INSUFFICIENT])

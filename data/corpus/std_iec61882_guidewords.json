@@ -30,7 +30,7 @@
   },
   {
    "chunk_id": "less-flow",
-   "text": "Less Flow: partial blockage, fouling, filter plugging, valve partially closed, machine running below capacity, leakage to atmosphere.",
+   "text": "Less Flow: partial blockage, fouling, filter plugging, valve partially closed, machine running below capacity, pump cavitation at low NPSH, leakage to atmosphere.",
    "guidewords": [
     "LESS"
    ],

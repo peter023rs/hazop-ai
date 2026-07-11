@@ -176,6 +176,111 @@ class TestParallelPathDirections(unittest.TestCase):
         self.assertEqual(graph["stats"]["no_through_flow_pairs"], 1)
 
 
+class TestPassthroughPropagation(unittest.TestCase):
+    """Equipment-level pass-through pass: a 2-connection valve or off-page
+    connector forces its unknown side once the other side is verified."""
+
+    @staticmethod
+    def _model(components, opcs, instruments, segments):
+        return {"conceptualModel": {
+            "Equipment": [
+                {"id": "e1", "sheet": 4, "tagName": "2401-V-001",
+                 "shape": "capsule"},
+                {"id": "e2", "sheet": 5, "tagName": "2401-V-002",
+                 "shape": "capsule"},
+            ],
+            "Nozzle": [
+                {"id": "n1", "sheet": 4, "equipment": "e1"},
+                {"id": "n2", "sheet": 5, "equipment": "e2"},
+            ],
+            "PipingComponent": components,
+            "ProcessInstrumentationFunction": instruments,
+            "PipeOffPageConnector": opcs,
+            "PipingNode": [
+                {"id": "j1", "sheet": 4, "nodeType": "junction"},
+                {"id": "j2", "sheet": 4, "nodeType": "junction"},
+            ],
+            "PipingNetworkSegment": segments,
+        }}
+
+    def _find(self, graph, a, b):
+        for e in graph["edges"]:
+            if {e["source"], e["target"]} == {a, b}:
+                return e
+
+    def test_valve_second_side_forced(self):
+        # arrow directs V-001 -> valve; the valve's other side has no votes
+        # anywhere, but a 2-connection valve stores no fluid
+        graph = build_equipment_graph(self._model(
+            components=[{"id": "pc1", "sheet": 4,
+                         "componentClass": "GateValve"}],
+            opcs=[], instruments=[],
+            segments=[
+                {"id": "s1", "from": "n1", "to": "j1",
+                 "flowDirection": "from_to", "flowDirectionSource": "arrow"},
+                {"id": "s2", "from": "j1", "to": "pc1"},
+                {"id": "s3", "from": "pc1", "to": "j2"},
+                {"id": "s4", "from": "j2", "to": "n2"},
+            ]))
+        e = self._find(graph, "XV-pc1", "2401-V-002")
+        self.assertEqual(e["attributes"]["direction"], "known")
+        self.assertEqual((e["source"], e["target"]),
+                         ("XV-pc1", "2401-V-002"))
+        self.assertEqual(e["attributes"]["direction_sources"],
+                         ["l2-passthrough"])
+        self.assertEqual(graph["stats"]["l2_passthrough_forced"], 1)
+
+    def test_instrument_tap_does_not_block_forcing(self):
+        # a pressure tap hanging off the valve's downstream leg must not
+        # count as a third connection
+        graph = build_equipment_graph(self._model(
+            components=[{"id": "pc1", "sheet": 4,
+                         "componentClass": "GateValve"}],
+            opcs=[],
+            instruments=[{"id": "i1", "sheet": 4, "tagName": "2401-PT-001"}],
+            segments=[
+                {"id": "s1", "from": "n1", "to": "j1",
+                 "flowDirection": "from_to", "flowDirectionSource": "arrow"},
+                {"id": "s2", "from": "j1", "to": "pc1"},
+                {"id": "s3", "from": "pc1", "to": "j2"},
+                {"id": "s4", "from": "j2", "to": "n2"},
+                {"id": "s5", "from": "j2", "to": "i1"},
+            ]))
+        e = self._find(graph, "XV-pc1", "2401-V-002")
+        self.assertEqual(e["attributes"]["direction"], "known")
+        self.assertEqual((e["source"], e["target"]),
+                         ("XV-pc1", "2401-V-002"))
+
+    def test_offpage_connector_bridges_sheets(self):
+        # sheet 4 flows into the connector; the sheet 5 side inherits it
+        graph = build_equipment_graph(self._model(
+            components=[],
+            opcs=[{"id": "opc1", "sheet": 4, "labels": ["A1"]}],
+            instruments=[],
+            segments=[
+                {"id": "s1", "from": "n1", "to": "opc1",
+                 "flowDirection": "from_to", "flowDirectionSource": "arrow"},
+                {"id": "s2", "from": "opc1", "to": "n2"},
+            ]))
+        e = self._find(graph, "OPC-A1", "2401-V-002")
+        self.assertEqual(e["attributes"]["direction"], "known")
+        self.assertEqual((e["source"], e["target"]),
+                         ("OPC-A1", "2401-V-002"))
+        self.assertEqual(e["attributes"]["direction_sources"],
+                         ["l2-passthrough"])
+
+    def test_vessel_never_forced(self):
+        # vessels may have unextracted connections: 2-connection vessels
+        # are NOT pass-through, so nothing may be forced through EQ nodes
+        graph = build_equipment_graph(self._model(
+            components=[], opcs=[], instruments=[],
+            segments=[
+                {"id": "s1", "from": "n1", "to": "n2",
+                 "flowDirection": "from_to", "flowDirectionSource": "arrow"},
+            ]))
+        self.assertEqual(graph["stats"]["l2_passthrough_forced"], 0)
+
+
 @unittest.skipUnless(L1_MODEL.exists(), "stage 1 output not present")
 class TestRealPlantModel(unittest.TestCase):
     def test_real_model_contracts_cleanly(self):

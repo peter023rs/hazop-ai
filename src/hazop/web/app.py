@@ -29,12 +29,22 @@ from hazop.l3_reasoner.mock_data.pump_vessel import (build_study_node,
                                                      build_topology)
 from hazop.l3_reasoner.reasoner.core import AIReasoner
 from hazop.l3_reasoner.reasoner.critic import critique
+from hazop.l3_reasoner.reasoner.evidence_critic import LexicalEvidenceCritic
 from hazop.l3_reasoner.reasoner.llm import StubLLM
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
 from hazop.l3_reasoner.reasoner.schema import Parameter, StudyNode
 from hazop.l3_reasoner.reasoner.topology import TopologyReasoner
 from hazop.l3_reasoner.evaluation import (PUMP_VESSEL_GOLD, evaluate_node,
                                           load_gold)
+from hazop.l3_reasoner.evaluation.fabrication import build_fabrication_report
+from hazop.l3_reasoner.evaluation.grounding import audit_grounding
+from hazop.l3_reasoner.evaluation.latency import (TARGET_P95_SECONDS,
+                                                  measure_latency)
+from hazop.l3_reasoner.evaluation.seeded_omissions import (
+    TARGET_OMISSION_DETECTION, run_seeded_omission_eval)
+from hazop.rtm import rtm_view, update_requirement
+from hazop.rtm import RTM_PATH as _DEFAULT_RTM_PATH
+from hazop.telemetry import SuggestionEvent, TelemetryLog
 
 # Runtime data ships with the repo under data/ (override with HAZOP_DATA,
 # e.g. the Docker image sets HAZOP_DATA=/app/data).
@@ -349,6 +359,146 @@ def api_eval():
         "baseline": _run_eval(MockRetriever()),
         "integrated": _run_eval(state().retriever),
     })
+
+
+@app.route("/api/scorecard")
+def api_scorecard():
+    """Section 4.3 model-performance gates (MDL-7..13) in one measured run —
+    the web view of hazop.l3_reasoner.mdl_scorecard. `retriever=mock` scores
+    the L3 baseline; `retriever=kb` scores the integrated Stage-2 KB."""
+    which = request.args.get("retriever", "mock")
+    retriever = MockRetriever() if which == "mock" else state().retriever
+    topology, node = build_topology(), build_study_node()
+    reasoner = AIReasoner(topology=topology, retriever=retriever,
+                          llm=StubLLM(), grounding_required=True,
+                          evidence_critic=LexicalEvidenceCritic())
+
+    rows, latency = measure_latency(reasoner, node)
+    gold_result = evaluate_node(rows, load_gold(PUMP_VESSEL_GOLD))
+    grounding = audit_grounding(rows, topology)
+    fabrication = build_fabrication_report(rows, sample_size=8)
+    omissions = run_seeded_omission_eval(node, rows, trials=20)
+
+    def gate(gid, name, display, status, target, detail=None):
+        return {"id": gid, "name": name, "display": display,
+                "status": status, "target": target, "detail": detail or []}
+
+    def mark(ok):
+        return "pass" if ok else "fail"
+
+    pct = lambda x: f"{100 * x:.1f}%"
+    by_kind = omissions.rate_by_kind()
+    gates = [
+        gate("MDL-7", "deviation coverage",
+             pct(gold_result.deviation_coverage),
+             mark(gold_result.deviation_coverage >= 0.85), ">= 85%",
+             [f"missing: {m}" for m in gold_result.missing_deviations]),
+        gate("MDL-9", "cause recall",
+             pct(gold_result.causes.recall),
+             mark(gold_result.causes.recall >= 0.80), ">= 80%",
+             [f"missed: {m}" for m in gold_result.causes.missed]),
+        gate("MDL-10", "grounding precision",
+             pct(grounding.precision), mark(grounding.passed), ">= 98%",
+             [f"ungrounded {v.tag} in {v.kind} of [{v.deviation_label}]"
+              for v in grounding.violations]),
+        gate("MDL-11", "fabrication rate",
+             pct(fabrication.released_unverified_rate) + " proxy",
+             "human_audit", "< 1% by expert audit",
+             [f"citation-bearing: {fabrication.citation_bearing}",
+              f"generator citation-failure rate: "
+              f"{pct(fabrication.generator_citation_failure_rate)} "
+              f"({fabrication.generator_citation_failures}"
+              f"/{fabrication.stage_b_checked} Stage-B-checked)",
+              f"refused as contradicted: {fabrication.refused_findings}",
+              f"released with unverified citations: "
+              f"{fabrication.released_unverified}"
+              f"/{fabrication.released_citation_bearing}"]),
+        gate("MDL-12", "latency P95",
+             f"{latency.p95:.2f} s", mark(latency.passed),
+             f"<= {TARGET_P95_SECONDS:.0f} s",
+             [f"P50 {latency.p50:.3f} s",
+              f"worst {latency.worst[1]:.3f} s [{latency.worst[0]}]"]),
+        gate("MDL-13", "omission detection",
+             pct(omissions.detection_rate), mark(omissions.passed),
+             f">= {100 * TARGET_OMISSION_DETECTION:.0f}%",
+             [f"{k}: {det}/{tot}" for k, (det, tot)
+              in sorted(by_kind.items())]),
+    ]
+
+    return jsonify({
+        "meta": {
+            "node_id": node.node_id,
+            "retriever": which,
+            "llm": "StubLLM (deterministic)",
+            "evidence_critic": "lexical",
+            "note": "StubLLM run: numbers validate the measurement harness, "
+                    "not a model (VV-1). Same gates rerun unchanged against "
+                    "a real generator.",
+        },
+        "gates": gates,
+        "latency": {"labels": latency.labels,
+                    "timings_ms": [round(1000 * t, 2)
+                                   for t in latency.timings_s]},
+        "audit_sample": [{
+            "sample_id": i.sample_id,
+            "deviation": i.deviation_label,
+            "kind": i.kind,
+            "claim": i.claim,
+            "confidence": i.confidence,
+            "citations": [{"evidence_id": c.evidence_id,
+                           "snippet": c.snippet,
+                           "verdict": c.stage_b_verdict,
+                           "rationale": c.stage_b_rationale}
+                          for c in i.citations],
+        } for i in fabrication.sample],
+    })
+
+
+# Accept/edit/reject telemetry (MDL-14 / FR-SW-2). Module-level so tests
+# can point it at a temp file; one JSONL under the data dir by default.
+TELEMETRY_PATH = DATA_DIR / "telemetry" / "suggestion_events.jsonl"
+
+
+@app.route("/api/telemetry", methods=["POST"])
+def api_telemetry_record():
+    payload = request.get_json(force=True, silent=True) or {}
+    try:
+        event = SuggestionEvent(**payload)
+    except (TypeError, ValueError) as err:
+        # schema violations are the caller's bug; never half-record
+        return jsonify({"error": str(err)}), 400
+    TelemetryLog(TELEMETRY_PATH).record(event)
+    return jsonify(event.to_dict()), 201
+
+
+@app.route("/api/telemetry", methods=["GET"])
+def api_telemetry_summary():
+    s = TelemetryLog(TELEMETRY_PATH).summarize()
+    return jsonify({"total": s.total, "by_action": s.by_action,
+                    "by_kind": s.by_kind})
+
+
+# Requirements Traceability Matrix (Fable section 9). Module-level path so
+# tests can point at a copy; the JSON file is the controlled deliverable.
+RTM_PATH = _DEFAULT_RTM_PATH
+
+
+@app.route("/api/rtm")
+def api_rtm():
+    return jsonify(rtm_view(RTM_PATH))
+
+
+@app.route("/api/rtm/<req_id>", methods=["POST"])
+def api_rtm_update(req_id):
+    payload = request.get_json(force=True, silent=True) or {}
+    try:
+        entry = update_requirement(req_id, status=payload.get("status"),
+                                   notes=payload.get("notes"), path=RTM_PATH)
+    except KeyError as err:
+        return jsonify({"error": str(err)}), 404
+    except ValueError as err:
+        return jsonify({"error": str(err)}), 400
+    return jsonify(entry)
 
 
 def main():

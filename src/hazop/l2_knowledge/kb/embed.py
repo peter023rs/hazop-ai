@@ -45,5 +45,29 @@ class HashingEmbedder(EmbedderInterface):
         return [x / norm for x in v] if norm else v
 
 
+class SentenceTransformerEmbedder(EmbedderInterface):
+    """The real dense half: an on-prem sentence-transformers model behind
+    the same seam (AR-3: embeddings never leave the deployment). Needs the
+    `embed` extra; the model downloads once to the local HF cache. The
+    default is small enough for CPU and multilingual (the 2401 drawing's
+    connector text is Chinese; the KB is English).
+
+    Same tests, same index, same fusion — only `embed()` changes.
+    """
+
+    DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+
+    def __init__(self, model_name: str = DEFAULT_MODEL, model=None):
+        if model is None:
+            from sentence_transformers import SentenceTransformer  # deferred
+            model = SentenceTransformer(model_name)
+        self.model = model
+        self.dim = int(model.get_sentence_embedding_dimension())
+
+    def embed(self, text: str) -> list[float]:
+        v = self.model.encode(text, normalize_embeddings=True)
+        return [float(x) for x in v]
+
+
 def cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b))

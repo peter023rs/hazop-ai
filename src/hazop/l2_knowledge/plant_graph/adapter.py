@@ -33,6 +33,15 @@ pooled per (terminal pair, direction class), never across classes:
     through-flow direction: "unknown" plus a direction_note explaining why;
   * no votes anywhere -> "unknown" (drawing order, do not trust).
 
+After contraction a pass-through propagation runs at the *equipment* level:
+a valve / check valve / relief valve / off-page connector with exactly two
+process-side connections stores no fluid, so once one side is direction-
+verified the other is forced ("l2-passthrough"). Stage 1 already propagates
+along sheet geometry; this pass adds only what the contracted graph can
+see — terminal pairs whose geometry pooled into mixed direction classes,
+and continuation across sheets through linked off-page connectors.
+Connections that cross a flow divergence (direction_note) are never forced.
+
 "conflict" remains in the vocabulary for genuinely contradictory evidence,
 but stage 1 already refuses to emit contradictory flowDirection on a run
 (disagreeing seeds set direction_conflict there), so it should stay rare.
@@ -233,6 +242,8 @@ def build_equipment_graph(model: dict) -> dict:
                 "attributes": attrs,
             })
 
+    n_forced = _passthrough_pass(nodes, edge_list)
+
     connected = {t for e in edge_list for t in (e["source"], e["target"])}
     n_dir = sum(1 for e in edge_list
                 if e["attributes"]["direction"] == "known")
@@ -248,11 +259,63 @@ def build_equipment_graph(model: dict) -> dict:
             "direction_conflicts": n_conf,
             "anti_parallel_pairs": n_anti,
             "no_through_flow_pairs": n_no_through,
+            "l2_passthrough_forced": n_forced,
             "isolated_terminals": len(set(nodes) - connected),
             "raw_piping_nodes": len(cm.get("PipingNode", [])),
             "raw_segments": len(cm.get("PipingNetworkSegment", [])),
         },
     }
+
+
+# node types through which flow must pass unchanged (no storage, no branching
+# once contracted to exactly two process-side connections)
+_PASSTHROUGH_TYPES = {"valve", "check_valve", "relief_valve", "line"}
+
+
+def _passthrough_pass(nodes: dict, edge_list: list) -> int:
+    """Equipment-level direction propagation, iterated to a fixpoint.
+
+    For every pass-through node with exactly two process-side connections
+    where exactly one carries direction="known": flow in must equal flow
+    out, so the unknown side is forced and tagged "l2-passthrough".
+    Instrument taps don't count as connections; no-through-flow pairs
+    (direction_note) are never forced. Returns the number forced.
+    """
+    adj = defaultdict(list)
+    for e in edge_list:
+        adj[e["source"]].append(e)
+        adj[e["target"]].append(e)
+
+    def other_end(e, tag):
+        return e["target"] if e["source"] == tag else e["source"]
+
+    forced = 0
+    changed = True
+    while changed:
+        changed = False
+        for tag, node in nodes.items():
+            if node["equipment_type"] not in _PASSTHROUGH_TYPES:
+                continue
+            proc = [e for e in adj[tag]
+                    if nodes[other_end(e, tag)]["equipment_type"]
+                    != "instrument"]
+            if len(proc) != 2:
+                continue
+            k = [e for e in proc if e["attributes"]["direction"] == "known"]
+            u = [e for e in proc if e["attributes"]["direction"] == "unknown"
+                 and "direction_note" not in e["attributes"]]
+            if len(k) != 1 or len(u) != 1:
+                continue
+            e_u = u[0]
+            flow_enters = k[0]["target"] == tag
+            # flow entering must leave through e_u (and vice versa)
+            if flow_enters != (e_u["source"] == tag):
+                e_u["source"], e_u["target"] = e_u["target"], e_u["source"]
+            e_u["attributes"]["direction"] = "known"
+            e_u["attributes"]["direction_sources"] = ["l2-passthrough"]
+            forced += 1
+            changed = True
+    return forced
 
 
 def to_l3_topology(graph: dict):

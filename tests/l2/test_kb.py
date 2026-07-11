@@ -101,3 +101,39 @@ class TestBM25(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSentenceTransformerEmbedderSeam(unittest.TestCase):
+    """The real-embedder adapter against an injected fake model — verifies
+    the seam without downloading anything."""
+
+    def test_wraps_model_and_reports_dim(self):
+        from hazop.l2_knowledge.kb.embed import SentenceTransformerEmbedder
+
+        class FakeModel:
+            def get_sentence_embedding_dimension(self):
+                return 3
+
+            def encode(self, text, normalize_embeddings=False):
+                return [1.0, 0.0, 0.0]
+
+        emb = SentenceTransformerEmbedder(model=FakeModel())
+        self.assertEqual(emb.dim, 3)
+        self.assertEqual(emb.embed("anything"), [1.0, 0.0, 0.0])
+
+    def test_hybrid_index_accepts_the_seam(self):
+        from hazop.l2_knowledge.kb.embed import SentenceTransformerEmbedder
+
+        class FakeModel:
+            def get_sentence_embedding_dimension(self):
+                return 4
+
+            def encode(self, text, normalize_embeddings=False):
+                return [1.0, 0.0, 0.0, 0.0]   # everything is similar
+
+        index = HybridIndex(embedder=SentenceTransformerEmbedder(
+            model=FakeModel()))
+        index.ingest([make_doc("D1")])
+        self.assertTrue(index.search("compressor discharge", k=1))
+        # and the usual lexical route still works through it
+        self.assertTrue(index.search("blocked outlet", k=1))

@@ -21,3 +21,7 @@ outputs/
 runs/
 *.log
 .pytest_cache/
+
+# Runtime telemetry events (MDL-14 audit trail lives with the deployment,
+# not in the repo)
+data/telemetry/

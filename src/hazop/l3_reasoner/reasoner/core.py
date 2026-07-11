@@ -5,23 +5,33 @@ Pipeline per study node:
   1. Generate full guideword x parameter deviation matrix   (FR-03-01 / FR-ARE-1)
   2. For each deviation: retrieve evidence from KB           (FR-03-02 / FR-ARE-2, RAG)
   3. Generate candidate causes/consequences/safeguards       (FR-03-03 / FR-ARE-3/4)
-  4. Ground every referenced tag against topology; reject
-     findings that cite non-existent tags                    (FR-ARE-9 / MDL-10 hard gate)
-  5. Enrich safeguards with topology-derived facts
+  4. Stage A critic: ground every referenced tag against
+     topology; reject findings citing non-existent tags      (FR-ARE-9 / MDL-10 hard gate)
+  5. Stage B critic (optional seam): judge every claim
+     against its cited evidence — contradicted -> refused,
+     unsupporting citations stripped, confidence re-composed (DDR-02 / MDL-11)
+  6. Enrich safeguards with topology-derived facts
      (relief path present, check valve present)              (deterministic, MDL-3)
-  6. Attach confidence + evidence, set provenance            (NFR-S-02 / FR-ARE-5, AR-1)
-  7. Emit worksheet rows; risk ranking left blank            (FR-ARE-6)
+  7. Attach confidence + evidence, set provenance            (NFR-S-02 / FR-ARE-5, AR-1)
+  8. Emit worksheet rows; risk ranking left blank            (FR-ARE-6)
 
 Runs today end-to-end on mock topology + mock retriever + stub LLM.
 """
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
+from .evidence_critic import EvidenceCriticInterface, EvidenceVerdict
 from .guidewords import Deviation, Guideword, deviations_for_parameters
 from .llm import LLMInterface, GeneratedFinding
 from .schema import RetrieverInterface, StudyNode, TopologyGraph, Parameter
 from .topology import TopologyReasoner
 from .worksheet import Finding, RejectedFinding, WorksheetRow, Provenance
+
+# confidence floor for findings whose citations all failed Stage B — same
+# floor the generators use for findings that never cited evidence
+_UNSUPPORTED_CONFIDENCE = 0.30
 
 
 class AIReasoner:
@@ -31,20 +41,39 @@ class AIReasoner:
         retriever: RetrieverInterface,
         llm: LLMInterface,
         grounding_required: bool = True,
+        evidence_critic: EvidenceCriticInterface | None = None,
+        max_workers: int = 1,
     ):
         self.topology = topology
         self.topo_reasoner = TopologyReasoner(topology)
         self.retriever = retriever
         self.llm = llm
         self.grounding_required = grounding_required
+        self.evidence_critic = evidence_critic
+        # parallel fan-out per guideword x parameter (DDR-11) toward the
+        # <=10 s P95/deviation live-session target (MDL-12). Deviations are
+        # independent by construction; retriever/LLM/critic implementations
+        # behind the seams must be thread-safe (read-only index, API client)
+        self.max_workers = max_workers
 
     # ---- public API ------------------------------------------------------
 
     def analyze_node(self, node: StudyNode) -> list[WorksheetRow]:
-        rows: list[WorksheetRow] = []
-        for deviation in deviations_for_parameters(node.parameters):
-            rows.append(self._analyze_deviation(node, deviation))
-        return rows
+        deviations = deviations_for_parameters(node.parameters)
+        if self.max_workers <= 1:
+            return [self._analyze_deviation(node, d) for d in deviations]
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            # map() keeps worksheet order identical to the serial run and
+            # re-raises the first failure, matching serial semantics
+            return list(pool.map(
+                lambda d: self._analyze_deviation(node, d), deviations))
+
+    def analyze_deviation(self, node: StudyNode,
+                          deviation: Deviation) -> WorksheetRow:
+        """One deviation through the full pipeline. Public so the latency
+        harness (MDL-12) can time the per-deviation unit the spec's P95
+        target is written against."""
+        return self._analyze_deviation(node, deviation)
 
     # ---- per-deviation pipeline -----------------------------------------
 
@@ -70,6 +99,12 @@ class AIReasoner:
                                       "consequence", rejected)
         safeguards = self._grounded(generated.safeguards, ev_by_id,
                                     "safeguard", rejected)
+
+        # Stage B critic (DDR-02): claims vs their cited evidence
+        causes = self._evidence_checked(causes, "cause", rejected)
+        consequences = self._evidence_checked(consequences, "consequence",
+                                              rejected)
+        safeguards = self._evidence_checked(safeguards, "safeguard", rejected)
 
         # deterministic topology-derived safeguards (MDL-3)
         safeguards.extend(self._topology_safeguards(node, deviation))
@@ -115,6 +150,49 @@ class AIReasoner:
                 evidence=evidence,
                 provenance=Provenance.AI_GENERATED,
             ))
+        return out
+
+    def _evidence_checked(self, findings: list[Finding], kind: str,
+                          rejected: list[RejectedFinding]) -> list[Finding]:
+        """
+        Stage B critic (DDR-02 / MDL-11). For every finding that cites
+        evidence: any contradicted citation refuses the whole finding
+        (audit-recorded, never fabricated around); citations judged
+        insufficient are stripped so no suggestion cites evidence that
+        does not support it; confidence is re-composed from the surviving
+        citations and can only fall. Findings without citations pass
+        through — they are already labelled unsupported inferences.
+        """
+        if self.evidence_critic is None:
+            return findings
+        out: list[Finding] = []
+        for f in findings:
+            if not f.evidence:
+                out.append(f)
+                continue
+            checks = self.evidence_critic.check_claim(f.text, f.evidence)
+            f.evidence_checks = [c.to_dict() for c in checks]
+            contradicted = [c.evidence_id for c in checks
+                            if c.verdict == EvidenceVerdict.CONTRADICTED]
+            if contradicted:
+                rejected.append(RejectedFinding(
+                    kind=kind,
+                    text=f.text,
+                    confidence=f.confidence,
+                    reason="evidence_contradicted",
+                    failed_evidence=contradicted,
+                ))
+                continue
+            supported_ids = {c.evidence_id for c in checks
+                             if c.verdict == EvidenceVerdict.SUPPORTED}
+            surviving = [e for e in f.evidence
+                         if e.source_id in supported_ids]
+            if len(surviving) < len(f.evidence):
+                f.evidence = surviving
+                recomposed = (0.4 + 0.15 * len(surviving) if surviving
+                              else _UNSUPPORTED_CONFIDENCE)
+                f.confidence = round(min(f.confidence, recomposed), 3)
+            out.append(f)
         return out
 
     def _topology_safeguards(self, node: StudyNode, deviation: Deviation) -> list[Finding]:

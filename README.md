@@ -10,7 +10,7 @@ limitations:
 | stage | guide |
 |---|---|
 | Stage 1 — P&ID → topology graph (deterministic, no ML/OCR) | [src/hazop/l1_extraction/README.md](src/hazop/l1_extraction/README.md) |
-| Stage 2 — plant graph + curated KB retrieval | [src/hazop/l2_knowledge/README.md](src/hazop/l2_knowledge/README.md) |
+| Stage 2 — process model layer (plant graph, node proposal, deviation screening) + curated KB retrieval | [src/hazop/l2_knowledge/README.md](src/hazop/l2_knowledge/README.md) |
 | Stage 3 — guideword reasoning → HAZOP worksheet | [src/hazop/l3_reasoner/README.md](src/hazop/l3_reasoner/README.md) |
 | Integrated dashboard on :8780 | [src/hazop/web/README.md](src/hazop/web/README.md) |
 
@@ -25,12 +25,14 @@ hazop-ai/
 │   │   ├── trace_lines.py, assemble_graph.py, build_viewer.py
 │   │   ├── normalize_pdf.py, compat_check.py, extract_page_spike.py
 │   │   └── export_dexpi.py, export_pydexpi_native.py
-│   ├── l2_knowledge/         # Stage 2: plant graph + curated KB retrieval
-│   │   ├── kb/               #   hybrid BM25 + embedding retriever
-│   │   ├── plant_graph/      #   L1 adapter + Neo4j store
+│   ├── l2_knowledge/         # Stage 2: process model layer + curated KB retrieval
+│   │   ├── kb/               #   hybrid BM25 + embedding retriever, XLSX worksheet ingest
+│   │   ├── plant_graph/      #   L1 adapter + Neo4j store + condensed node views
+│   │   │                     #   + HAZOP node proposal (nodes.py, FR-PML-2)
+│   │   │                     #   + deviation screening seam/heuristics (screening.py, FR-PML-3/4/5)
 │   │   ├── demo.py, load_neo4j.py
 │   ├── l3_reasoner/          # Stage 3: guideword reasoning -> HAZOP worksheet
-│   │   ├── reasoner/         #   core, critic, guidewords, topology, worksheet, llm
+│   │   ├── reasoner/         #   core, critic, evidence_critic, guidewords, topology, worksheet, llm
 │   │   ├── evaluation/       #   gold sets + metrics
 │   │   ├── mock_data/        #   pump/vessel fixture
 │   │   ├── demo.py, evaluate.py

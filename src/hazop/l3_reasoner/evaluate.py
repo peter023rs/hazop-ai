@@ -2,8 +2,13 @@
 evaluate.py — Run the reasoner against the gold-standard set and score it.
 
     python evaluate.py                    # offline StubLLM baseline
-    python evaluate.py --llm anthropic    # real model (needs `pip install
+    python evaluate.py --llm anthropic    # cloud model (needs `pip install
                                           # anthropic` + ANTHROPIC_API_KEY)
+    python evaluate.py --llm local        # self-hosted model on an OpenAI-
+                                          # compatible server (Ollama/vLLM/
+                                          # LM Studio; HAZOP_LLM_URL/_MODEL)
+    python evaluate.py --evidence-critic lexical|anthropic|local|none
+                                          # Stage B critic (DDR-02) in the loop
 
 Measures the spec acceptance metrics on the mock pump/vessel process:
 deviation coverage >= 85% (V1 AC-03 / MDL-7) and cause recall >= 80%
@@ -20,24 +25,41 @@ import sys
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
 from hazop.l3_reasoner.reasoner.core import AIReasoner
-from hazop.l3_reasoner.reasoner.llm import AnthropicLLM, StubLLM
+from hazop.l3_reasoner.reasoner.evidence_critic import (AnthropicEvidenceCritic,
+                                                        LexicalEvidenceCritic,
+                                                        LocalEvidenceCritic)
+from hazop.l3_reasoner.reasoner.llm import AnthropicLLM, LocalLLM, StubLLM
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
 from hazop.l3_reasoner.evaluation import load_gold, evaluate_node, PUMP_VESSEL_GOLD
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--llm", choices=("stub", "anthropic"), default="stub")
+    parser.add_argument("--llm", choices=("stub", "anthropic", "local"),
+                        default="stub")
+    parser.add_argument("--evidence-critic",
+                        choices=("lexical", "anthropic", "local", "none"),
+                        default="lexical")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="parallel deviation fan-out (DDR-11)")
     args = parser.parse_args()
 
     gold = load_gold(PUMP_VESSEL_GOLD)
     node = build_study_node()
 
+    critic = {"lexical": LexicalEvidenceCritic,
+              "anthropic": AnthropicEvidenceCritic,
+              "local": LocalEvidenceCritic,
+              "none": lambda: None}[args.evidence_critic]()
+    llm = {"stub": StubLLM, "anthropic": AnthropicLLM,
+           "local": LocalLLM}[args.llm]()
     reasoner = AIReasoner(
         topology=build_topology(),
         retriever=MockRetriever(),
-        llm=AnthropicLLM() if args.llm == "anthropic" else StubLLM(),
+        llm=llm,
         grounding_required=True,
+        evidence_critic=critic,
+        max_workers=args.workers,
     )
     rows = reasoner.analyze_node(node)
 

@@ -7,7 +7,7 @@ pre-baked except the Stage 1 drawing outputs shipped in `data/l1_output/`):
 |---|---|---|
 | Overview | pipeline stats L1 → L2 → L3, KB ingestion report, Neo4j link | all three stages |
 | L1 · Extraction | per-sheet topology overlays + node/edge/direction stats | `data/l1_output/` |
-| L2 · Plant Graph | interactive 427-node equipment graph (cytoscape.js); solid blue = verified flow, dashed = drawing order; click a node for a direction-aware upstream/downstream trace + relief-path status | `plant_graph` adapter + L3 `TopologyReasoner` |
+| L2 · Plant Graph | interactive 428-node equipment graph (cytoscape.js); solid blue = verified flow, dashed = drawing order; click a node for a direction-aware upstream/downstream trace + relief-path status | `plant_graph` adapter + L3 `TopologyReasoner` |
 | L2 · Knowledge Base | live hybrid retrieval (BM25+dense, guideword filters) and the corpus curation gates | `kb.KBRetriever` |
 | L3 · HAZOP Worksheet | runs the real `AIReasoner` on the mock process or the digitized 2401 compressor train: findings with confidence + evidence, grounding-gate audit, critic report, gold-eval baseline-vs-integrated comparison | `reasoner` + `evaluation` |
 
