@@ -14,7 +14,7 @@ added by this work; the pre-existing 125 all still pass).
 
 ### MDL-13 — Seeded-omission detection harness
 `src/hazop/l4_model/seeded_omissions.py`
-(tests: `tests/l3/test_seeded_omissions.py`, 10 tests)
+(tests: `tests/l4/test_seeded_omissions.py`, 10 tests)
 
 Takes a complete worksheet from any generator, deliberately deletes content
 (two seeded kinds: `dropped_row` — an entire deviation row removed;
@@ -28,7 +28,7 @@ pin this at exactly 1.0 so any future critic regression is a hard failure.
 
 ### MDL-10 — Output tag-grounding audit
 `src/hazop/l4_model/grounding.py`
-(tests: `tests/l3/test_grounding.py`, 9 tests)
+(tests: `tests/l4/test_grounding.py`, 9 tests)
 
 The pipeline already enforces tag grounding per finding (Stage A gate in
 `core._grounded` over declared `referenced_tags`). This audit measures the
@@ -46,7 +46,7 @@ target.
 
 ### MDL-12 — Per-deviation latency harness
 `src/hazop/l4_model/latency.py`
-(tests: `tests/l3/test_latency.py`, 8 tests)
+(tests: `tests/l4/test_latency.py`, 8 tests)
 
 Times each deviation **serially through the full pipeline** (retrieval →
 generation → Stage A → Stage B → topology safeguards) — the unit a scribe
@@ -59,7 +59,7 @@ A small public entry point `AIReasoner.analyze_deviation()` was added to
 
 ### MDL-11 — Fabrication-rate audit preparation
 `src/hazop/l4_model/fabrication.py`
-(tests: `tests/l3/test_fabrication.py`, 10 tests)
+(tests: `tests/l4/test_fabrication.py`, 10 tests)
 
 MDL-11's verdict is **expert audit by definition** — the harness automates
 everything around the human:
@@ -78,9 +78,9 @@ everything around the human:
   `outputs/mdl11_audit_sheet.csv` / `.json`.
 
 ### MDL-14 — Accept/edit/reject telemetry
-`src/hazop/l4_model/telemetry.py` (tests: `tests/test_telemetry.py`, 9 tests)
+`src/hazop/l4_model/telemetry.py` (tests: `tests/l4/test_telemetry.py`, 9 tests)
 `src/hazop/web/app.py` — new `POST/GET /api/telemetry` endpoints
-(tests: `tests/test_web_telemetry.py`, 3 tests)
+(tests: `tests/l4/test_web_telemetry.py`, 3 tests)
 
 `SuggestionEvent` captures one scribe decision with user identity and
 timestamp (FR-SW-2), the suggestion text as offered, the action
@@ -97,7 +97,7 @@ dashboard state, so offline-captured events (FR-SW-5) can be synced in.
 
 ### Unified Section 4.3 scorecard
 `src/hazop/l4_model/mdl_scorecard.py`
-(test: `tests/l3/test_scorecard.py`)
+(test: `tests/l4/test_scorecard.py`)
 
 One command runs a single worksheet pass and feeds **every** gate from the
 same output:
@@ -213,7 +213,7 @@ exists and is visualized in the dashboard:
   status filter chips, text search, and per-row **editable** status
   dropdown + notes that POST to `/api/rtm/<id>` and persist to the JSON
   (round-trip verified in the browser).
-* Tests: `tests/test_rtm.py` (11 tests: file validation, full-family
+* Tests: `tests/requirementTracker/test_rtm.py` (11 tests: file validation, full-family
   coverage, rollup math, scanner, update round-trip, endpoints). Suite
   total now **186 passing**.
 
