@@ -28,10 +28,10 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-from ..reasoner.core import AIReasoner
-from ..reasoner.guidewords import deviations_for_parameters
-from ..reasoner.schema import StudyNode
-from ..reasoner.worksheet import WorksheetRow
+from hazop.l3_reasoner.reasoner.core import AIReasoner
+from hazop.l3_reasoner.reasoner.guidewords import deviations_for_parameters
+from hazop.l3_reasoner.reasoner.schema import StudyNode
+from hazop.l3_reasoner.reasoner.worksheet import WorksheetRow
 
 TARGET_P95_SECONDS = 10.0        # Fable MDL-12
 

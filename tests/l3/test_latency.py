@@ -9,7 +9,7 @@ as a smoke check that the harness measures an actual run.
 import unittest
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
-from hazop.l3_reasoner.evaluation.latency import (
+from hazop.l4_model.latency import (
     TARGET_P95_SECONDS, LatencyResult, measure_latency,
     nearest_rank_percentile,
 )

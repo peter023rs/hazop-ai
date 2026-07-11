@@ -29,9 +29,9 @@ import copy
 import random
 from dataclasses import dataclass
 
-from ..reasoner.critic import CritiqueReport, critique
-from ..reasoner.schema import StudyNode
-from ..reasoner.worksheet import WorksheetRow
+from hazop.l3_reasoner.reasoner.critic import CritiqueReport, critique
+from hazop.l3_reasoner.reasoner.schema import StudyNode
+from hazop.l3_reasoner.reasoner.worksheet import WorksheetRow
 
 TARGET_OMISSION_DETECTION = 0.90     # Fable MDL-13
 

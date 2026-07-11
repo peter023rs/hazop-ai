@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
-from hazop.l3_reasoner.evaluation.fabrication import (
+from hazop.l4_model.fabrication import (
     build_fabrication_report, write_audit_sheet_csv, write_audit_sheet_json,
 )
 from hazop.l3_reasoner.reasoner.core import AIReasoner

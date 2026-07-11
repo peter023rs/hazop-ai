@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hazop.telemetry import (
+from hazop.l4_model.telemetry import (
     SCHEMA_VERSION, SuggestionAction, SuggestionEvent, TelemetryLog,
 )
 from hazop.l3_reasoner.reasoner.worksheet import Provenance

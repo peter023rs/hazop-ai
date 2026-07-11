@@ -10,7 +10,7 @@ the audit catches the fabricated tag the gate would have blocked.
 import unittest
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
-from hazop.l3_reasoner.evaluation.grounding import (
+from hazop.l4_model.grounding import (
     TARGET_GROUNDING_PRECISION, audit_grounding, extract_tag_references,
     known_tags,
 )

@@ -2,9 +2,9 @@
 mdl_scorecard.py — One-pass runner for the Section 4.3 model-performance
 gates (Fable MDL-9..13) over a single reasoner configuration.
 
-    python -m hazop.l3_reasoner.mdl_scorecard
-    python -m hazop.l3_reasoner.mdl_scorecard --llm anthropic --workers 4
-    python -m hazop.l3_reasoner.mdl_scorecard --audit-dir outputs
+    python -m hazop.l4_model.mdl_scorecard
+    python -m hazop.l4_model.mdl_scorecard --llm anthropic --workers 4
+    python -m hazop.l4_model.mdl_scorecard --audit-dir outputs
 
 One worksheet run feeds every gate, so all numbers describe the same output:
 
@@ -34,13 +34,13 @@ from hazop.l3_reasoner.reasoner.evidence_critic import (AnthropicEvidenceCritic,
                                                         LocalEvidenceCritic)
 from hazop.l3_reasoner.reasoner.llm import AnthropicLLM, LocalLLM, StubLLM
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
-from hazop.l3_reasoner.evaluation import load_gold, evaluate_node, PUMP_VESSEL_GOLD
-from hazop.l3_reasoner.evaluation.fabrication import (build_fabrication_report,
+from hazop.l4_model import load_gold, evaluate_node, PUMP_VESSEL_GOLD
+from hazop.l4_model.fabrication import (build_fabrication_report,
                                                       write_audit_sheet_csv,
                                                       write_audit_sheet_json)
-from hazop.l3_reasoner.evaluation.grounding import audit_grounding
-from hazop.l3_reasoner.evaluation.latency import measure_latency
-from hazop.l3_reasoner.evaluation.seeded_omissions import run_seeded_omission_eval
+from hazop.l4_model.grounding import audit_grounding
+from hazop.l4_model.latency import measure_latency
+from hazop.l4_model.seeded_omissions import run_seeded_omission_eval
 
 
 def _line(gate: str, metric: str, value: str, status: str) -> str:

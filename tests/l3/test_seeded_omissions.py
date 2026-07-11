@@ -10,7 +10,7 @@ import random
 import unittest
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
-from hazop.l3_reasoner.evaluation.seeded_omissions import (
+from hazop.l4_model.seeded_omissions import (
     BLANKED_CONSEQUENCES, DROPPED_ROW, TARGET_OMISSION_DETECTION,
     OmissionEvalResult, OmissionTrial, SeededOmission,
     detected_omissions, run_seeded_omission_eval, seed_omissions,

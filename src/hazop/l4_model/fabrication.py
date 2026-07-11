@@ -44,7 +44,7 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..reasoner.worksheet import Finding, WorksheetRow
+from hazop.l3_reasoner.reasoner.worksheet import Finding, WorksheetRow
 
 TARGET_FABRICATION_RATE = 0.01     # Fable MDL-11 — judged by human audit
 

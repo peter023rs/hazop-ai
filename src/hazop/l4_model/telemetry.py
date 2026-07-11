@@ -36,7 +36,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from .l3_reasoner.reasoner.worksheet import Provenance
+from hazop.l3_reasoner.reasoner.worksheet import Provenance
 
 SCHEMA_VERSION = 1
 

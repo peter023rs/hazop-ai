@@ -35,8 +35,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..reasoner.schema import TopologyGraph
-from ..reasoner.worksheet import WorksheetRow
+from hazop.l3_reasoner.reasoner.schema import TopologyGraph
+from hazop.l3_reasoner.reasoner.worksheet import WorksheetRow
 
 TARGET_GROUNDING_PRECISION = 0.98    # Fable MDL-10
 

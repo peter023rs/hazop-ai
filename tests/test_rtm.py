@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hazop.rtm import (RTM_PATH, VALID_STATUSES, load_rtm, rollup,
+from hazop.requirementTracker.rtm import (RTM_PATH, VALID_STATUSES, load_rtm, rollup,
                        rtm_view, scan_citations, update_requirement)
 import hazop.web.app as webapp
 

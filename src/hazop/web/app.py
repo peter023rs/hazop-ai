@@ -34,17 +34,17 @@ from hazop.l3_reasoner.reasoner.llm import StubLLM
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
 from hazop.l3_reasoner.reasoner.schema import Parameter, StudyNode
 from hazop.l3_reasoner.reasoner.topology import TopologyReasoner
-from hazop.l3_reasoner.evaluation import (PUMP_VESSEL_GOLD, evaluate_node,
+from hazop.l4_model import (PUMP_VESSEL_GOLD, evaluate_node,
                                           load_gold)
-from hazop.l3_reasoner.evaluation.fabrication import build_fabrication_report
-from hazop.l3_reasoner.evaluation.grounding import audit_grounding
-from hazop.l3_reasoner.evaluation.latency import (TARGET_P95_SECONDS,
+from hazop.l4_model.fabrication import build_fabrication_report
+from hazop.l4_model.grounding import audit_grounding
+from hazop.l4_model.latency import (TARGET_P95_SECONDS,
                                                   measure_latency)
-from hazop.l3_reasoner.evaluation.seeded_omissions import (
+from hazop.l4_model.seeded_omissions import (
     TARGET_OMISSION_DETECTION, run_seeded_omission_eval)
-from hazop.rtm import rtm_view, update_requirement
-from hazop.rtm import RTM_PATH as _DEFAULT_RTM_PATH
-from hazop.telemetry import SuggestionEvent, TelemetryLog
+from hazop.requirementTracker.rtm import rtm_view, update_requirement
+from hazop.requirementTracker.rtm import RTM_PATH as _DEFAULT_RTM_PATH
+from hazop.l4_model.telemetry import SuggestionEvent, TelemetryLog
 
 # Runtime data ships with the repo under data/ (override with HAZOP_DATA,
 # e.g. the Docker image sets HAZOP_DATA=/app/data).
@@ -364,7 +364,7 @@ def api_eval():
 @app.route("/api/scorecard")
 def api_scorecard():
     """Section 4.3 model-performance gates (MDL-7..13) in one measured run —
-    the web view of hazop.l3_reasoner.mdl_scorecard. `retriever=mock` scores
+    the web view of hazop.l4_model.mdl_scorecard. `retriever=mock` scores
     the L3 baseline; `retriever=kb` scores the integrated Stage-2 KB."""
     which = request.args.get("retriever", "mock")
     retriever = MockRetriever() if which == "mock" else state().retriever

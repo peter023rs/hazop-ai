@@ -30,7 +30,7 @@ from hazop.l3_reasoner.reasoner.evidence_critic import (AnthropicEvidenceCritic,
                                                         LocalEvidenceCritic)
 from hazop.l3_reasoner.reasoner.llm import AnthropicLLM, LocalLLM, StubLLM
 from hazop.l3_reasoner.reasoner.mock_retriever import MockRetriever
-from hazop.l3_reasoner.evaluation import load_gold, evaluate_node, PUMP_VESSEL_GOLD
+from hazop.l4_model import load_gold, evaluate_node, PUMP_VESSEL_GOLD
 
 
 def main() -> int:

@@ -8,8 +8,8 @@ independently of the reasoner) plus the deterministic StubLLM baseline run.
 import unittest
 
 from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
-from hazop.l3_reasoner.evaluation.gold import GoldItem, GoldDeviation, GoldNode, load_gold, PUMP_VESSEL_GOLD
-from hazop.l3_reasoner.evaluation.metrics import (
+from hazop.l4_model.gold import GoldItem, GoldDeviation, GoldNode, load_gold, PUMP_VESSEL_GOLD
+from hazop.l4_model.metrics import (
     evaluate_node, _item_matched,
     TARGET_CAUSE_RECALL, TARGET_DEVIATION_COVERAGE,
 )

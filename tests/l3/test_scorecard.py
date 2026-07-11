@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hazop.l3_reasoner.mdl_scorecard import main
+from hazop.l4_model.mdl_scorecard import main
 
 
 class TestScorecard(unittest.TestCase):
