@@ -8,6 +8,9 @@ Part B  Stage 1 plant model -> equipment-level topology (the L1->L3 bridge)
 Part C  Stage 3's real AIReasoner running with THIS retriever instead of its
         MockRetriever — first on L3's mock pump/vessel node, then on a study
         node built from the real 2401 drawing.
+Part D  Process Model Layer: HAZOP node boundary proposal on the real
+        drawing (FR-PML-2) + deviation screening through the simulator
+        seam's heuristic fallback (FR-PML-3/4/5).
 
 Offline, deterministic, no API key — same philosophy as the L3 scaffold.
 """
@@ -64,7 +67,8 @@ def part_b() -> dict:
           f"{s['connections']} connections "
           f"({s['isolated_terminals']} isolated)")
     print(f"  flow direction: {s['directed_connections']} connections known "
-          f"(from arrows/check valves/connector text + propagation), "
+          f"(arrows/check valves/PSV orientation/connector text + "
+          f"propagation incl. {s['l2_passthrough_forced']} L2 pass-through), "
           f"{s['direction_conflicts']} conflicts flagged")
 
     by_type: dict[str, int] = {}
@@ -92,6 +96,7 @@ def part_c(kb: KBRetriever, graph: dict) -> None:
     from hazop.l3_reasoner.mock_data.pump_vessel import build_topology, build_study_node
     from hazop.l3_reasoner.reasoner.core import AIReasoner
     from hazop.l3_reasoner.reasoner.critic import critique
+    from hazop.l3_reasoner.reasoner.evidence_critic import LexicalEvidenceCritic
     from hazop.l3_reasoner.reasoner.llm import StubLLM
     from hazop.l3_reasoner.reasoner.schema import Parameter, StudyNode
 
@@ -100,7 +105,8 @@ def part_c(kb: KBRetriever, graph: dict) -> None:
     # C1 — L3's own mock process, MockRetriever swapped for the real KB
     print("\nC1. mock pump/vessel node with the stage 2 retriever")
     reasoner = AIReasoner(topology=build_topology(), retriever=retriever,
-                          llm=StubLLM(), grounding_required=True)
+                          llm=StubLLM(), grounding_required=True,
+                          evidence_critic=LexicalEvidenceCritic())
     rows = reasoner.analyze_node(build_study_node())
     with_ev = sum(1 for r in rows for f in r.causes + r.consequences + r.safeguards
                   if f.evidence)
@@ -131,8 +137,22 @@ def part_c(kb: KBRetriever, graph: dict) -> None:
                       "air to the plant/instrument air headers.",
     )
     print(f"  node members: {members}")
+
+    # node-scoped condensed context view — the only topology text the
+    # generation layer should see (Delft-style condensing)
+    from hazop.l2_knowledge.plant_graph import (condensed_node_view, render_text,
+                                                token_estimate)
+    view = condensed_node_view(graph, members, hops=1)
+    text = render_text(view)
+    print(f"  condensed node view: {len(view['members'])} members, "
+          f"{len(view['neighbors'])} neighbors, "
+          f"{len(view['connections'])} connections — "
+          f"~{token_estimate(graph)} tokens (full graph) -> "
+          f"~{token_estimate(text)} tokens (view)")
+
     reasoner = AIReasoner(topology=topo, retriever=retriever,
-                          llm=StubLLM(), grounding_required=True)
+                          llm=StubLLM(), grounding_required=True,
+                          evidence_critic=LexicalEvidenceCritic())
     rows = reasoner.analyze_node(node)
     report = critique(node, rows)
     print(f"  {len(rows)} deviations analyzed on the real topology")
@@ -140,13 +160,59 @@ def part_c(kb: KBRetriever, graph: dict) -> None:
     n_known = sum(1 for e in graph["edges"]
                   if e["attributes"]["direction"] == "known")
     print(f"  NOTE: {n_known}/{len(graph['edges'])} connections carry real "
-          "flow direction (stage 1 arrows/check valves/connector text + "
-          "conservation); the L3 topology reasoner treats the rest as "
-          "unverified — traversable both ways, flagged, and never behind a "
-          "high-confidence safeguard claim.")
+          "flow direction (stage 1 arrows/check valves/PSV orientation/"
+          "connector text + conservation, plus L2 pass-through); the L3 "
+          "topology reasoner treats the rest as unverified — traversable "
+          "both ways, flagged, and never behind a high-confidence "
+          "safeguard claim.")
+
+
+def part_d(graph: dict) -> None:
+    print("\n" + "=" * 78)
+    print("D. PROCESS MODEL LAYER — node proposal + deviation screening")
+    print("=" * 78)
+    if not graph:
+        print("no plant graph — skipping")
+        return
+    from hazop.l2_knowledge.plant_graph import (ScreeningCase, propose_nodes,
+                                                screen_case)
+
+    # D1 — FR-PML-2: propose HAZOP node boundaries at design-intent changes
+    proposal = propose_nodes(graph)
+    s = proposal["stats"]
+    print(f"\nD1. {s['proposed_nodes']} HAZOP nodes proposed covering "
+          f"{s['equipment_assigned']} equipment items "
+          f"({s['unassigned']} isolated/instrument-only items left for the "
+          f"facilitator)")
+    print(f"  boundaries: {s['pressure_break_boundaries']} pressure breaks, "
+          f"{s['phase_change_boundaries']} phase changes, "
+          f"{s['unit_boundaries']} unit (off-page) boundaries")
+    for p in proposal["nodes"][:3]:
+        print(f"  {p['node_id']} [{p['status']}] {p['description']}: "
+              f"{', '.join(p['members'])}")
+        print(f"      {p['rationale'][0]}")
+    print(f"  ({proposal['note']})")
+
+    # D2 — FR-PML-5 heuristic screening behind the FR-PML-3 simulator seam
+    print("\nD2. deviation screening — no simulator wired in, so the "
+          "heuristic fallback answers:")
+    compressor = next((n["tag"] for n in graph["nodes"]
+                       if n["equipment_type"] == "compressor"), None)
+    for case in [
+        ScreeningCase("D2-PUMP-DEADHEAD", "P-901", "pump", "blocked_outlet",
+                      {"normal_discharge_pressure": 8.0}),
+        ScreeningCase("D2-K-BLOCKED", compressor or "K-901", "compressor",
+                      "blocked_outlet", {}),
+    ]:
+        r = screen_case(case)
+        print(f"  {case.equipment_tag} / {case.deviation}: "
+              f"{r.estimate or 'qualitative only'}")
+        print(f"      [{r.label}] reliable={r.reliable}")
+        print(f"      basis: {r.basis[:100]}...")
 
 
 if __name__ == "__main__":
     kb = part_a()
     graph = part_b()
     part_c(kb, graph)
+    part_d(graph)
