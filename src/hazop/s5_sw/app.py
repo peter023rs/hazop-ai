@@ -48,6 +48,8 @@ from hazop.mdl.seeded_omissions import (
 from hazop.s6_rcm.rtm import rtm_view, update_requirement
 from hazop.s6_rcm.rtm import RTM_PATH as _DEFAULT_RTM_PATH
 from hazop.mdl.telemetry import SuggestionEvent, TelemetryLog
+from hazop.s5_sw import llm_lab
+from hazop.s5_sw.llm_lab import BENCHMARKS, LabError, RunManager
 
 # Runtime data ships with the repo under data/ (override with HAZOP_DATA,
 # e.g. the Docker image sets HAZOP_DATA=/app/data).
@@ -545,6 +547,114 @@ def api_telemetry_summary():
     s = TelemetryLog(TELEMETRY_PATH).summarize()
     return jsonify({"total": s.total, "by_action": s.by_action,
                     "by_kind": s.by_kind})
+
+
+# LLM Lab (multi-device local-model benchmarking). Module-level paths so
+# tests can repoint them; the YAML matrix is the single source of truth.
+LAB_CONFIG_PATH = DATA_DIR / "llm_lab" / "llm_lab.yaml"
+LAB_RUNS_PATH = DATA_DIR / "llm_lab" / "runs.jsonl"
+lab_runs = RunManager(LAB_RUNS_PATH)
+
+
+@app.route("/api/lab/config")
+def api_lab_config():
+    try:
+        config = llm_lab.load_config(LAB_CONFIG_PATH)
+    except LabError as err:
+        return jsonify({"error": err.args[0]}), 500
+    busy = set(lab_runs.busy_devices())
+    devices = []
+    for device in config.devices:
+        status = llm_lab.device_status(device)
+        installed = {m["name"] for m in status["installed"]}
+        devices.append({
+            "name": device.name, "base_url": device.base_url,
+            "hardware": device.hardware, "busy": device.name in busy,
+            **status,
+            "candidates": [{
+                "name": m.name, "role": m.role,
+                "installed": m.name in installed
+                or m.name.split(":")[0] in {i.split(":")[0]
+                                            for i in installed},
+            } for m in config.candidates(device.name)],
+        })
+    return jsonify({"devices": devices,
+                    "benchmarks": list(BENCHMARKS),
+                    "defaults": config.defaults,
+                    "critic_model": config.critic_model(),
+                    "config_path": str(LAB_CONFIG_PATH)})
+
+
+@app.route("/api/lab/run", methods=["POST"])
+def api_lab_run():
+    payload = request.get_json(force=True, silent=True) or {}
+    device_name = (payload.get("device") or "").strip()
+    model = (payload.get("model") or "").strip()
+    wanted = payload.get("benchmarks") or []
+    if not device_name or not model or not wanted:
+        return jsonify({"error": "need device, model and benchmarks"}), 400
+    bad = [b for b in wanted if b not in BENCHMARKS]
+    if bad:
+        return jsonify({"error": f"unknown benchmark(s): {bad}"}), 400
+    try:
+        config = llm_lab.load_config(LAB_CONFIG_PATH)
+        config.device(device_name)                 # validates the name
+    except LabError as err:
+        return jsonify({"error": err.args[0]}), 404
+    graph_query = state().graph_query
+
+    def job(progress):
+        results = {}
+        for benchmark in wanted:
+            progress(f"{benchmark}: starting …")
+            results[benchmark] = llm_lab.run_benchmark(
+                benchmark, config, device_name, model,
+                graph_query=graph_query,
+                progress=lambda t, b=benchmark: progress(f"{b}: {t}"))
+        return results
+
+    try:
+        run_id = lab_runs.start("benchmark", device_name, model, job,
+                                meta={"benchmarks": wanted,
+                                      "defaults": config.defaults})
+    except LabError as err:
+        return jsonify({"error": err.args[0]}), 409
+    return jsonify({"run_id": run_id}), 202
+
+
+@app.route("/api/lab/pull", methods=["POST"])
+def api_lab_pull():
+    payload = request.get_json(force=True, silent=True) or {}
+    device_name = (payload.get("device") or "").strip()
+    model = (payload.get("model") or "").strip()
+    if not device_name or not model:
+        return jsonify({"error": "need device and model"}), 400
+    try:
+        device = llm_lab.load_config(LAB_CONFIG_PATH).device(device_name)
+    except LabError as err:
+        return jsonify({"error": err.args[0]}), 404
+
+    def job(progress):
+        return llm_lab.pull_model(device.base_url, model, progress=progress)
+
+    try:
+        run_id = lab_runs.start("pull", device_name, model, job)
+    except LabError as err:
+        return jsonify({"error": err.args[0]}), 409
+    return jsonify({"run_id": run_id}), 202
+
+
+@app.route("/api/lab/run/<run_id>")
+def api_lab_run_status(run_id):
+    status = lab_runs.status(run_id)
+    if status is None:
+        return jsonify({"error": "unknown run id"}), 404
+    return jsonify(status)
+
+
+@app.route("/api/lab/runs")
+def api_lab_runs():
+    return jsonify(llm_lab.read_runs(LAB_RUNS_PATH))
 
 
 # Requirements Traceability Matrix (Fable section 9). Module-level path so

@@ -271,7 +271,7 @@ class GraphQuery:
         if intent is None and self.translator is not None:
             intent = self.translator.translate(question)
             if intent is not None:
-                intent = self._reground(intent)
+                intent = self.reground(intent)
         if intent is None:
             raise QueryError(
                 "I couldn't map that to a graph question. Try one of the "
@@ -295,7 +295,7 @@ class GraphQuery:
 
     # -- helpers -------------------------------------------------------
 
-    def _reground(self, intent: Intent) -> Intent:
+    def reground(self, intent: Intent) -> Intent:
         """Resolve possibly-partial tag mentions from a translator against
         the real graph; QueryError propagates for unknowns."""
         known = [n["tag"] for n in self.graph["nodes"]]
@@ -642,6 +642,43 @@ tags. equipment_type must be one of: {types}. Unused fields are null.
 """
 
 
+def _intent_from_payload(data: dict) -> Intent | None:
+    if data.get("kind") not in KINDS:
+        return None
+    return Intent(kind=data["kind"], tag=data.get("tag"),
+                  source=data.get("source"), target=data.get("target"),
+                  equipment_type=data.get("equipment_type"))
+
+
+class LocalTranslator:
+    """NL -> Intent via a self-hosted OpenAI-compatible server (Ollama,
+    vLLM, LM Studio, llama.cpp) — the on-prem branch of DDR-06. Same
+    contract as AnthropicTranslator: the model fills a typed Intent, never
+    Cypher, and GraphQuery re-grounds every tag so hallucinations fail
+    closed."""
+
+    def __init__(self, equipment_types: list[str],
+                 base_url: str | None = None, model: str | None = None,
+                 client=None):
+        if client is None:
+            from hazop.s3_are.reasoner.llm import OpenAICompatClient
+            client = OpenAICompatClient(
+                base_url=base_url or "http://localhost:11434/v1",
+                model=model or "llama3.1:8b")
+        self.client = client
+        self.system = _TRANSLATOR_PROMPT.format(
+            types=", ".join(sorted(equipment_types)))
+
+    def translate(self, question: str) -> Intent | None:
+        try:
+            data = self.client.chat_json(
+                self.system, question, _INTENT_SCHEMA, "graph_intent",
+                max_tokens=1000)
+        except RuntimeError:
+            return None      # invalid JSON twice -> abstain, never guess
+        return _intent_from_payload(data)
+
+
 class AnthropicTranslator:
     """NL -> Intent via the Anthropic API — the cloud branch of DDR-06,
     same lazy-import/injectable-client pattern as AnthropicLLM. The model
@@ -669,9 +706,4 @@ class AnthropicTranslator:
         if response.stop_reason == "refusal":
             return None
         text = next(b.text for b in response.content if b.type == "text")
-        data = json.loads(text)
-        if data.get("kind") not in KINDS:
-            return None
-        return Intent(kind=data["kind"], tag=data.get("tag"),
-                      source=data.get("source"), target=data.get("target"),
-                      equipment_type=data.get("equipment_type"))
+        return _intent_from_payload(json.loads(text))

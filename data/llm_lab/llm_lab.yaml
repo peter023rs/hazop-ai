@@ -1,0 +1,40 @@
+# LLM Lab — device / model matrix (single source of truth).
+#
+# The dashboard's "LLM Lab" tab renders this file and annotates it with live
+# state (reachable? model installed?); it never edits it. Add a device or a
+# candidate model here, commit, and every machine sees the same matrix.
+#
+# Workers are plain Ollama servers. To be reachable from the hub each worker
+# must listen beyond localhost:  OLLAMA_HOST=0.0.0.0 ollama serve
+# — only do that on a trusted LAN or tailnet.
+
+defaults:
+  temperature: 0.2
+  max_tokens: 4000
+  benchmarks: [capability, gold_eval, graph_accuracy]
+
+devices:
+  - name: peter-mbp
+    base_url: http://localhost:11434
+    hardware: "MacBook Pro M5 Pro, 24 GB unified memory"
+  - name: bro-pc
+    base_url: http://192.168.2.55:11434   # placeholder — set to the PC's LAN/tailscale IP
+    hardware: "brother's PC (fill in GPU/RAM)"
+
+# Candidate models to benchmark everywhere. Plain names pull from the Ollama
+# library; hf.co/... refs pull GGUFs straight from Hugging Face.
+# role: critic marks the smaller model used as the evidence critic (DDR-02).
+models:
+  - llama3.1:8b
+  - name: llama3.2:3b
+    role: critic
+  - qwen2.5:7b-instruct
+  - qwen2.5:14b-instruct-q4_K_M
+  - hf.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF
+
+# Optional per-device pruning of the candidate list.
+overrides:
+  peter-mbp:
+    exclude: []
+  bro-pc:
+    exclude: []

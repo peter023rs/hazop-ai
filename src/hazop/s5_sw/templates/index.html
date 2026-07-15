@@ -111,6 +111,25 @@
  .legend{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0}
  .legend .pill{cursor:default}
  .legend .pill:hover{filter:none}
+ /* ---- LLM Lab ---- */
+ .devgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));
+     gap:12px;margin-bottom:12px}
+ .devcard h2{display:flex;align-items:center;gap:8px}
+ .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+ .dot.up{background:var(--green)} .dot.down{background:var(--red)}
+ .devcard select{width:100%;background:#131318;color:var(--fg);
+     border:1px solid var(--line);border-radius:6px;padding:7px 9px;
+     font-size:13px;margin:8px 0}
+ .pullrow{display:flex;gap:6px}
+ .pullrow input{flex:1;background:#131318;border:1px solid var(--line);
+     border-radius:6px;color:var(--fg);padding:6px 9px;font-size:12px}
+ .benchrow{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+ .runprog{font-family:ui-monospace,Menlo,monospace;font-size:12px;
+     color:var(--blue);margin-top:8px;min-height:16px}
+ .runs-table td,.runs-table th{white-space:nowrap}
+ .runs-table .num{text-align:right}
+ details.rundetail{margin:4px 0}
+ details.rundetail pre{max-height:280px;overflow:auto}
 </style>
 </head>
 <body>
@@ -122,6 +141,7 @@
  <button data-tab="overview" class="active">Overview</button>
  <button data-tab="l1">L1 · Extraction</button>
  <button data-tab="graph">L2 · Graph Explorer</button>
+ <button data-tab="lab">LLM Lab</button>
  <button data-tab="kb">L2 · Knowledge Base</button>
  <button data-tab="ws">L3 · HAZOP Worksheet</button>
  <button data-tab="mdl">§4 · Model Gates</button>
@@ -144,6 +164,25 @@
   <div class="pagebtns" id="l1-pages"></div>
   <div id="l1-stats" class="dim" style="margin:8px 0"></div>
   <a id="l1-link" target="_blank"><img id="l1-img" class="overlay" alt=""></a>
+ </div>
+</div>
+
+<div id="tab-lab" class="tab" style="display:none">
+ <div class="card" style="margin-bottom:12px">
+  <h2>LLM Lab — which local model can replace the cloud generator?</h2>
+  <p class="dim">Devices and candidate models are declared in
+   <code id="lab-config-path">data/llm_lab/llm_lab.yaml</code> (edit + commit;
+   the page re-reads it on refresh, no restart). Each device is an Ollama
+   server — start it with <code>OLLAMA_HOST=0.0.0.0 ollama serve</code> on a
+   trusted network so the hub can reach it. Every run (including failures —
+   an out-of-memory <i>is</i> a result) lands in
+   <code>data/llm_lab/runs.jsonl</code>.</p>
+  <div class="benchrow" id="lab-benchmarks"></div>
+ </div>
+ <div class="devgrid" id="lab-devices"><p class="dim">loading devices…</p></div>
+ <div class="card">
+  <h2>Runs <button class="tele" id="lab-refresh">↻ refresh</button></h2>
+  <div id="lab-runs"><p class="dim">no runs yet</p></div>
  </div>
 </div>
 
@@ -271,8 +310,8 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => {
 });
 const done = {};
 function init(tab){ if(done[tab]) return; done[tab] = true;
-  ({overview: loadOverview, l1: loadL1, graph: loadGraph, kb: loadKB,
-    ws: loadWS, mdl: loadMDL, rtm: loadRTM})[tab](); }
+  ({overview: loadOverview, l1: loadL1, graph: loadGraph, lab: loadLab,
+    kb: loadKB, ws: loadWS, mdl: loadMDL, rtm: loadRTM})[tab](); }
 
 /* ---------- overview ---------- */
 async function loadOverview(){
@@ -572,6 +611,110 @@ function inspect(frame, node){
   box.querySelector('.fclose').onclick = () => box.style.display='none';
   box.querySelectorAll('.iq').forEach(b => b.onclick = () => {
     $('#q-input').value = b.dataset.q; runQuery(); });
+}
+
+/* ---------- LLM Lab ---------- */
+async function loadLab(){
+  $('#lab-refresh').onclick = () => { loadLabDevices(); loadLabRuns(); };
+  loadLabDevices(); loadLabRuns();
+}
+
+async function loadLabDevices(){
+  const d = await (await fetch('/api/lab/config')).json();
+  if(d.error){ $('#lab-devices').innerHTML =
+    `<p class="fanswer err">${esc(d.error)}</p>`; return; }
+  $('#lab-config-path').textContent = d.config_path;
+  $('#lab-benchmarks').innerHTML = '<b>benchmarks:</b> ' +
+    d.benchmarks.map(b => `<label><input type="checkbox" class="lab-bench"
+      value="${b}" ${ (d.defaults.benchmarks||d.benchmarks).includes(b) ? 'checked':''}>
+      ${b.replace('_',' ')}</label>`).join('') +
+    `<span class="dim">gold_eval runs all 29 deviations through the model —
+      minutes, not seconds · critic model: ${esc(d.critic_model||'lexical')}</span>`;
+  $('#lab-devices').innerHTML = d.devices.map(dev => `
+   <div class="card devcard" data-dev="${esc(dev.name)}">
+    <h2><span class="dot ${dev.reachable?'up':'down'}"></span>
+     ${esc(dev.name)} ${dev.busy ? '<span class="badge b-grey">busy</span>':''}</h2>
+    <div class="dim">${esc(dev.hardware)} · <code>${esc(dev.base_url)}</code></div>
+    ${dev.reachable ? `
+      <select class="lab-model">
+       ${dev.candidates.map(m => `<option value="${esc(m.name)}"
+          ${m.installed?'':'disabled'}>${esc(m.name)}
+          ${m.role==='critic'?' (critic)':''}
+          ${m.installed?'':' — not installed'}</option>`).join('')}
+      </select>
+      <div class="pullrow">
+       <input class="lab-pull-name" placeholder="pull: ollama name or hf.co/user/repo-GGUF">
+       <button class="tele lab-pull">⇩ pull</button>
+      </div>
+      <div style="margin-top:10px">
+       <button class="act lab-run" ${dev.busy?'disabled':''}>Run benchmarks ▶</button>
+      </div>`
+    : `<p class="fanswer err">unreachable: ${esc(dev.error)}</p>
+       <p class="dim">on that machine: <code>OLLAMA_HOST=0.0.0.0 ollama serve</code>,
+        then check the IP in the YAML.</p>`}
+    <div class="runprog"></div>
+   </div>`).join('');
+  document.querySelectorAll('.lab-run').forEach(b => b.onclick = () => {
+    const card = b.closest('.devcard');
+    const benches = [...document.querySelectorAll('.lab-bench:checked')].map(x=>x.value);
+    startLabRun(card, '/api/lab/run', {device: card.dataset.dev,
+      model: card.querySelector('.lab-model').value, benchmarks: benches});
+  });
+  document.querySelectorAll('.lab-pull').forEach(b => b.onclick = () => {
+    const card = b.closest('.devcard');
+    const name = card.querySelector('.lab-pull-name').value.trim();
+    if(!name) return;
+    startLabRun(card, '/api/lab/pull', {device: card.dataset.dev, model: name});
+  });
+}
+
+async function startLabRun(card, url, body){
+  const prog = card.querySelector('.runprog');
+  prog.textContent = 'starting…';
+  const resp = await fetch(url, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await resp.json();
+  if(!resp.ok){ prog.textContent = '✗ ' + d.error; return; }
+  card.querySelectorAll('button').forEach(x => x.disabled = true);
+  const poll = setInterval(async () => {
+    const s = await (await fetch('/api/lab/run/' + d.run_id)).json();
+    if(s.state === 'running'){ prog.textContent = '⏳ ' + (s.progress||''); return; }
+    clearInterval(poll);
+    prog.textContent = s.state === 'done' ? '✓ done' : '✗ ' + (s.error||'failed');
+    card.querySelectorAll('button').forEach(x => x.disabled = false);
+    loadLabRuns();
+    if(body.benchmarks === undefined) loadLabDevices();   // pull changes installs
+  }, 2000);
+}
+
+const fmtMetric = v => typeof v === 'number' ? v : (v === true ? '✓' :
+  v === false ? '✗' : (v ?? '—'));
+async function loadLabRuns(){
+  const runs = await (await fetch('/api/lab/runs')).json();
+  if(!runs.length){ $('#lab-runs').innerHTML = '<p class="dim">no runs yet</p>'; return; }
+  const KEY = ['tokens_per_s','json_schema_ok','deviation_coverage','cause_recall',
+               'hallucination_rate','grounding_precision','latency_p95_s',
+               'kind_accuracy','intent_accuracy','result_accuracy'];
+  const flat = r => { // one benchmark run may hold several benchmark results
+    const res = r.result || {}; const out = {};
+    for(const [k,v] of Object.entries(res)){
+      if(typeof v === 'object' && v !== null && !Array.isArray(v))
+        Object.assign(out, v); else out[k] = v; }
+    return out; };
+  $('#lab-runs').innerHTML = `<div style="overflow-x:auto">
+   <table class="runs-table"><tr><th>when</th><th>device</th><th>model</th>
+    <th>kind</th><th>state</th>${KEY.map(k=>`<th class="num">${k.replace(/_/g,' ')}</th>`).join('')}
+   </tr>` + runs.map(r => { const m = flat(r);
+    return `<tr><td>${esc((r.started||'').replace('T',' '))}</td>
+     <td>${esc(r.device)}</td><td>${esc(r.model)}</td><td>${esc(r.kind)}</td>
+     <td>${r.state==='done' ? '<span class="badge b-green">done</span>'
+         : `<span class="badge b-red" title="${esc(r.error||'')}">error</span>`}</td>
+     ${KEY.map(k=>`<td class="num">${fmtMetric(m[k])}</td>`).join('')}</tr>` +
+    ((m.failures||[]).length ? `<tr><td colspan="${5+KEY.length}">
+      <details class="rundetail"><summary class="dim">
+       ${m.failures.length} graph-accuracy failure(s)</summary>
+       <pre>${esc(JSON.stringify(m.failures, null, 1))}</pre></details></td></tr>` : '');
+   }).join('') + '</table></div>';
 }
 
 /* ---------- KB ---------- */
