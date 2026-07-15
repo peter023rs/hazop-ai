@@ -633,21 +633,67 @@ _INTENT_SCHEMA = {
 
 _TRANSLATOR_PROMPT = """\
 You translate a plant engineer's question about a process plant graph into
-one typed query intent. Kinds: downstream/upstream (flow tracing from a
-tag), neighbours (direct connections of a tag), path (source tag to target
-tag), list (all items of an equipment type), count (tally by type), relief
-(does the tag have a pressure-relief path), info (describe one tag).
-Copy tag mentions verbatim from the question — do not invent or complete
-tags. equipment_type must be one of: {types}. Unused fields are null.
+one typed query intent.
+
+kinds:
+  downstream / upstream — flow tracing from one tagged item
+  neighbours — direct connections of one tagged item
+  path — flow route from a source tag to a target tag
+  list — all items of one equipment type
+  count — tally items (by type only when the question names one)
+  relief — does the tagged item have a pressure-relief path
+  info — describe one tagged item
+
+field rules:
+- tag / source / target hold a SPECIFIC equipment tag copied verbatim from
+  the question. Tags look like 2401-K-001A or V-201 (letters, digits,
+  dashes). NEVER put a category word (vessel, valve, ...) in these fields;
+  never invent or complete a tag.
+- equipment_type holds a category, exactly one of: <types>. Use it for
+  list/count, or as a filter on downstream/upstream/neighbours.
+- every unused field is null (JSON null, not the string "null").
+
+examples:
+Q: which vessels are downstream of 2401-K-001A?
+{"kind": "downstream", "tag": "2401-K-001A", "source": null,
+ "target": null, "equipment_type": "vessel"}
+Q: list all relief valves
+{"kind": "list", "tag": null, "source": null, "target": null,
+ "equipment_type": "relief_valve"}
+Q: how does material get from K-100 to V-200?
+{"kind": "path", "tag": null, "source": "K-100", "target": "V-200",
+ "equipment_type": null}
+Q: is V-201 protected against overpressure?
+{"kind": "relief", "tag": "V-201", "source": null, "target": null,
+ "equipment_type": null}
 """
+
+
+def _translator_system(equipment_types: list[str]) -> str:
+    return _TRANSLATOR_PROMPT.replace(
+        "<types>", ", ".join(sorted(equipment_types)))
+
+
+_NULLISH = {"", "null", "none", "nil", "n/a", "na", "-"}
+
+
+def _clean_field(value) -> str | None:
+    """Small models routinely emit the *string* 'null' (or stray lists)
+    for unused schema fields; treat anything that isn't a real non-empty
+    string as absent rather than letting it reach tag grounding."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return None if value.lower() in _NULLISH else value
 
 
 def _intent_from_payload(data: dict) -> Intent | None:
     if data.get("kind") not in KINDS:
         return None
-    return Intent(kind=data["kind"], tag=data.get("tag"),
-                  source=data.get("source"), target=data.get("target"),
-                  equipment_type=data.get("equipment_type"))
+    return Intent(kind=data["kind"], tag=_clean_field(data.get("tag")),
+                  source=_clean_field(data.get("source")),
+                  target=_clean_field(data.get("target")),
+                  equipment_type=_clean_field(data.get("equipment_type")))
 
 
 class LocalTranslator:
@@ -666,8 +712,7 @@ class LocalTranslator:
                 base_url=base_url or "http://localhost:11434/v1",
                 model=model or "llama3.1:8b")
         self.client = client
-        self.system = _TRANSLATOR_PROMPT.format(
-            types=", ".join(sorted(equipment_types)))
+        self.system = _translator_system(equipment_types)
 
     def translate(self, question: str) -> Intent | None:
         try:
@@ -694,8 +739,7 @@ class AnthropicTranslator:
             client = anthropic.Anthropic()
         self.client = client
         self.model = model
-        self.system = _TRANSLATOR_PROMPT.format(
-            types=", ".join(sorted(equipment_types)))
+        self.system = _translator_system(equipment_types)
 
     def translate(self, question: str) -> Intent | None:
         response = self.client.messages.create(

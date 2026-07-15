@@ -10,7 +10,7 @@ subsystem of the requirements doc's §2.1 architecture ("stages 1–7").
 | 2 | PML — Process Model Layer (plant graph, node proposal, deviation screening, NL + Cypher query layer) | `hazop.s2_pml` | [src/hazop/s2_pml/README.md](src/hazop/s2_pml/README.md) |
 | 3 | ARE — AI Reasoning Engine (guideword reasoning → HAZOP worksheet) | `hazop.s3_are` | [src/hazop/s3_are/README.md](src/hazop/s3_are/README.md) |
 | 4 | KB — Knowledge Base (curated corpus, hybrid retrieval) | `hazop.s4_kb` | [src/hazop/s4_kb/README.md](src/hazop/s4_kb/README.md) |
-| 5 | SW — Study Workspace (integrated dashboard on :8780, incl. the Graph Explorer) | `hazop.s5_sw` | [src/hazop/s5_sw/README.md](src/hazop/s5_sw/README.md) |
+| 5 | SW — Study Workspace (integrated dashboard on :8780, incl. the Graph Explorer and the multi-device LLM Lab) | `hazop.s5_sw` | [src/hazop/s5_sw/README.md](src/hazop/s5_sw/README.md) |
 | 6 | RCM — Reporting & Compliance (today: the requirements traceability matrix) | `hazop.s6_rcm` | — |
 | 7 | AGM — Administration & Governance (placeholder; curation gate lives in s4_kb) | `hazop.s7_agm` | — |
 

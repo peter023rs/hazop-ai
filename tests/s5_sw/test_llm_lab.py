@@ -263,6 +263,20 @@ class TestLocalTranslator(unittest.TestCase):
                                           client=FakeClient())
                           .translate("hello"))
 
+    def test_nullish_strings_and_junk_normalize_to_none(self):
+        # small models emit the STRING "null" (or stray lists) for unused
+        # schema fields; those must not reach tag grounding
+        class FakeClient:
+            def chat_json(self, system, user, schema, name, max_tokens):
+                return {"kind": "count", "tag": "null", "source": "None",
+                        "target": [], "equipment_type": " vessel "}
+        intent = LocalTranslator(["vessel"],
+                                 client=FakeClient()).translate("tally?")
+        self.assertIsNone(intent.tag)
+        self.assertIsNone(intent.source)
+        self.assertIsNone(intent.target)
+        self.assertEqual(intent.equipment_type, "vessel")
+
 
 class TestRunManager(unittest.TestCase):
     def setUp(self):

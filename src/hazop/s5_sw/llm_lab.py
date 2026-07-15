@@ -414,6 +414,8 @@ def run_graph_accuracy(graph_query, translator, suite=None,
                 if got.kind == expected.kind and \
                         got_nodes == expected_nodes:
                     result_ok += 1
+                    if got != expected:
+                        outcome = "result matched, intent differed"
                 else:
                     outcome = "wrong result"
             except QueryError as err:
