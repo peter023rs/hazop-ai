@@ -13,8 +13,8 @@ added by this work; the pre-existing 125 all still pass).
 ## 1. What was built
 
 ### MDL-13 — Seeded-omission detection harness
-`src/hazop/l4_model/seeded_omissions.py`
-(tests: `tests/l4/test_seeded_omissions.py`, 10 tests)
+`src/hazop/mdl/seeded_omissions.py`
+(tests: `tests/mdl/test_seeded_omissions.py`, 10 tests)
 
 Takes a complete worksheet from any generator, deliberately deletes content
 (two seeded kinds: `dropped_row` — an entire deviation row removed;
@@ -27,8 +27,8 @@ deterministic critic detects **100 %** (60/60 across 20 trials); the tests
 pin this at exactly 1.0 so any future critic regression is a hard failure.
 
 ### MDL-10 — Output tag-grounding audit
-`src/hazop/l4_model/grounding.py`
-(tests: `tests/l4/test_grounding.py`, 9 tests)
+`src/hazop/mdl/grounding.py`
+(tests: `tests/mdl/test_grounding.py`, 9 tests)
 
 The pipeline already enforces tag grounding per finding (Stage A gate in
 `core._grounded` over declared `referenced_tags`). This audit measures the
@@ -45,8 +45,8 @@ the audit trail; gate OFF → the audit catches `V-999` and fails the ≥ 98 %
 target.
 
 ### MDL-12 — Per-deviation latency harness
-`src/hazop/l4_model/latency.py`
-(tests: `tests/l4/test_latency.py`, 8 tests)
+`src/hazop/mdl/latency.py`
+(tests: `tests/mdl/test_latency.py`, 8 tests)
 
 Times each deviation **serially through the full pipeline** (retrieval →
 generation → Stage A → Stage B → topology safeguards) — the unit a scribe
@@ -58,8 +58,8 @@ A small public entry point `AIReasoner.analyze_deviation()` was added to
 `reasoner/core.py` for this.
 
 ### MDL-11 — Fabrication-rate audit preparation
-`src/hazop/l4_model/fabrication.py`
-(tests: `tests/l4/test_fabrication.py`, 10 tests)
+`src/hazop/mdl/fabrication.py`
+(tests: `tests/mdl/test_fabrication.py`, 10 tests)
 
 MDL-11's verdict is **expert audit by definition** — the harness automates
 everything around the human:
@@ -78,9 +78,9 @@ everything around the human:
   `outputs/mdl11_audit_sheet.csv` / `.json`.
 
 ### MDL-14 — Accept/edit/reject telemetry
-`src/hazop/l4_model/telemetry.py` (tests: `tests/l4/test_telemetry.py`, 9 tests)
-`src/hazop/web/app.py` — new `POST/GET /api/telemetry` endpoints
-(tests: `tests/l4/test_web_telemetry.py`, 3 tests)
+`src/hazop/mdl/telemetry.py` (tests: `tests/mdl/test_telemetry.py`, 9 tests)
+`src/hazop/s5_sw/app.py` — new `POST/GET /api/telemetry` endpoints
+(tests: `tests/mdl/test_web_telemetry.py`, 3 tests)
 
 `SuggestionEvent` captures one scribe decision with user identity and
 timestamp (FR-SW-2), the suggestion text as offered, the action
@@ -96,15 +96,15 @@ violations are 400, never half-recorded) and don't require the heavy
 dashboard state, so offline-captured events (FR-SW-5) can be synced in.
 
 ### Unified Section 4.3 scorecard
-`src/hazop/l4_model/mdl_scorecard.py`
-(test: `tests/l4/test_scorecard.py`)
+`src/hazop/mdl/mdl_scorecard.py`
+(test: `tests/mdl/test_scorecard.py`)
 
 One command runs a single worksheet pass and feeds **every** gate from the
 same output:
 
 ```
 cd hazop-ai
-.venv/bin/python -m hazop.l4_model.mdl_scorecard --audit-dir outputs
+.venv/bin/python -m hazop.mdl.mdl_scorecard --audit-dir outputs
 # real model:  --llm anthropic --evidence-critic anthropic
 ```
 
@@ -129,7 +129,7 @@ never affects it — its verdict belongs to the expert audit sheet.
 | Req | Requirement | Status |
 |---|---|---|
 | MDL-1 | Foundation LLM, no fine-tuning, RAG + prompts | ✅ pre-existing (`reasoner/llm.py`) |
-| MDL-2 | Hybrid retrieval over KB | ✅ pre-existing (`l2_knowledge/kb`) |
+| MDL-2 | Hybrid retrieval over KB | ✅ pre-existing (`s4_kb`) |
 | MDL-3 | Deterministic topology reasoner | ✅ pre-existing (`reasoner/topology.py`) |
 | MDL-4 | P&ID vision/document pipeline | ✅ pre-existing (L1 extraction) |
 | MDL-5 | Critic/verifier second pass | ✅ pre-existing (Stage A + B critics) |
@@ -185,7 +185,7 @@ A strict verification pass was run over all four stages after the harness work:
 * **Suite** — 175/175 tests pass, including with
   `-W error::DeprecationWarning -W error::FutureWarning`.
 
-**Web embedding:** the dashboard (`hazop.web.app`) now has a
+**Web embedding:** the dashboard (`hazop.s5_sw.app`) now has a
 **"§4 · Model Gates"** tab backed by a new `/api/scorecard` endpoint
 (`?retriever=mock|kb`): gate cards with PASS / FAIL / HUMAN-AUDIT badges,
 the per-deviation latency chart (MDL-12), the MDL-11 expert audit sample
@@ -206,14 +206,14 @@ exists and is visualized in the dashboard:
   (`done`/`partial`/`todo`/`blocked`/`out_of_scope`), notes, and evidence
   refs. First-pass statuses authored 2026-07-10 (23 done · 22 partial ·
   34 todo — 43% weighted); review and correct in the UI or the file.
-* **Derivation layer:** `src/hazop/requirementTracker/rtm.py` — scans the source tree for
+* **Derivation layer:** `src/hazop/s6_rcm/rtm.py` — scans the source tree for
   requirement-ID citations in docstrings and merges file:line evidence at
   read time (never stored, so it can't go stale), plus per-section rollups.
 * **Dashboard:** "Tasks · RTM" tab — overall + per-section progress bars,
   status filter chips, text search, and per-row **editable** status
   dropdown + notes that POST to `/api/rtm/<id>` and persist to the JSON
   (round-trip verified in the browser).
-* Tests: `tests/requirementTracker/test_rtm.py` (11 tests: file validation, full-family
+* Tests: `tests/s6_rcm/test_rtm.py` (11 tests: file validation, full-family
   coverage, rollup math, scanner, update round-trip, endpoints). Suite
   total now **186 passing**.
 

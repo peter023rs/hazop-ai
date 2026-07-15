@@ -19,8 +19,8 @@
       "status": "done",
       "notes": "Provenance enum on findings/rows; telemetry encodes the accepted/edited transitions.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/worksheet.py",
-        "src/hazop/l4_model/telemetry.py"
+        "src/hazop/s3_are/reasoner/worksheet.py",
+        "src/hazop/mdl/telemetry.py"
       ]
     },
     {
@@ -38,8 +38,8 @@
       "status": "done",
       "notes": "LocalLLM + LocalEvidenceCritic over OpenAI-compatible servers; Anthropic branch is opt-in config. Legal-review step is organizational.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/llm.py",
-        "src/hazop/l3_reasoner/reasoner/evidence_critic.py"
+        "src/hazop/s3_are/reasoner/llm.py",
+        "src/hazop/s3_are/reasoner/evidence_critic.py"
       ]
     },
     {
@@ -60,8 +60,8 @@
       "status": "partial",
       "notes": "LLMInterface/RetrieverInterface/EvidenceCriticInterface seams make the ARE swappable; no versioned inter-subsystem APIs.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/llm.py",
-        "src/hazop/l3_reasoner/reasoner/schema.py"
+        "src/hazop/s3_are/reasoner/llm.py",
+        "src/hazop/s3_are/reasoner/schema.py"
       ]
     },
     {
@@ -71,8 +71,8 @@
       "status": "partial",
       "notes": "Vector-PDF ingestion done (deterministic geometry); DEXPI export done. DWG/DGN import and raster ingestion absent.",
       "evidence": [
-        "src/hazop/l1_extraction/pipeline.py",
-        "src/hazop/l1_extraction/export_dexpi.py"
+        "src/hazop/s1_dim/pipeline.py",
+        "src/hazop/s1_dim/export_dexpi.py"
       ]
     },
     {
@@ -82,7 +82,7 @@
       "status": "partial",
       "notes": "DEXPI/ISO 15926 canonical model exists; no SPPID/AVEVA importers to measure fidelity against.",
       "evidence": [
-        "src/hazop/l1_extraction/export_pydexpi_native.py"
+        "src/hazop/s1_dim/export_pydexpi_native.py"
       ]
     },
     {
@@ -100,7 +100,7 @@
       "status": "partial",
       "notes": "KB ingests curated SDS/datasheet/standard docs; automatic attribute-to-topology-element linking absent.",
       "evidence": [
-        "src/hazop/l2_knowledge/kb"
+        "src/hazop/s4_kb"
       ]
     },
     {
@@ -118,8 +118,8 @@
       "status": "partial",
       "notes": "L1 overlay sheets in dashboard + standalone validator app (hazop_L1 app.py :8777) with accept/reject; one-click correction flow incomplete.",
       "evidence": [
-        "src/hazop/l1_extraction/app.py",
-        "src/hazop/web/app.py"
+        "src/hazop/s1_dim/app.py",
+        "src/hazop/s5_sw/app.py"
       ]
     },
     {
@@ -129,8 +129,8 @@
       "status": "done",
       "notes": "Direction-confidence-aware tracing; live in the Plant Graph tab.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/topology.py",
-        "src/hazop/l2_knowledge/plant_graph"
+        "src/hazop/s3_are/reasoner/topology.py",
+        "src/hazop/s2_pml"
       ]
     },
     {
@@ -140,7 +140,7 @@
       "status": "done",
       "notes": "Type-level design-intent rules propose nodes, ambiguities flagged for facilitator; proposals labeled as proposals.",
       "evidence": [
-        "src/hazop/l2_knowledge"
+        "src/hazop/s2_pml"
       ]
     },
     {
@@ -166,7 +166,7 @@
       "status": "done",
       "notes": "Deadhead/compressor heuristics emit ESTIMATE labels with reliable=False.",
       "evidence": [
-        "src/hazop/l2_knowledge"
+        "src/hazop/s2_pml"
       ]
     },
     {
@@ -176,7 +176,7 @@
       "status": "done",
       "notes": "Deterministic matrix; check-valve case raised as deviation with safeguard, never hidden.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/guidewords.py"
+        "src/hazop/s3_are/reasoner/guidewords.py"
       ]
     },
     {
@@ -186,8 +186,8 @@
       "status": "partial",
       "notes": "Topology + hybrid RAG + historical precedents done; OREDA reliability categories and licensed incident DBs (CSB/IChemE/Marsh) absent.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/core.py",
-        "src/hazop/l2_knowledge/kb"
+        "src/hazop/s3_are/reasoner/core.py",
+        "src/hazop/s4_kb"
       ]
     },
     {
@@ -197,8 +197,8 @@
       "status": "partial",
       "notes": "Topology propagation primitives + consequence generation exist; explicit graph-path citation inside consequence text is thin; no simulation screens yet.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/topology.py",
-        "src/hazop/l3_reasoner/reasoner/core.py"
+        "src/hazop/s3_are/reasoner/topology.py",
+        "src/hazop/s3_are/reasoner/core.py"
       ]
     },
     {
@@ -208,7 +208,7 @@
       "status": "partial",
       "notes": "Topology-derived safeguards (relief path, check valves) done with direction-confidence; C&E ingestion and prevention/mitigation/IPL classification absent.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/core.py"
+        "src/hazop/s3_are/reasoner/core.py"
       ]
     },
     {
@@ -218,7 +218,7 @@
       "status": "done",
       "notes": "Composed confidence (never model self-report), citations survive export, UNSUPPORTED INFERENCE labeling.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+        "src/hazop/s3_are/reasoner/worksheet.py"
       ]
     },
     {
@@ -228,7 +228,7 @@
       "status": "done",
       "notes": "Severity/likelihood left None by construction.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+        "src/hazop/s3_are/reasoner/worksheet.py"
       ]
     },
     {
@@ -246,8 +246,8 @@
       "status": "done",
       "notes": "Matrix-coverage + no-consequence + low-confidence + unsupported channels done and MDL-13-gated at 100%; sibling/precedent comparison is a future extension.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/critic.py",
-        "src/hazop/l4_model/seeded_omissions.py"
+        "src/hazop/s3_are/reasoner/critic.py",
+        "src/hazop/mdl/seeded_omissions.py"
       ]
     },
     {
@@ -257,8 +257,8 @@
       "status": "done",
       "notes": "Stage A hard gate + JSON-schema outputs + refusal handling + Stage B evidence critic.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/core.py",
-        "src/hazop/l3_reasoner/reasoner/evidence_critic.py"
+        "src/hazop/s3_are/reasoner/core.py",
+        "src/hazop/s3_are/reasoner/evidence_critic.py"
       ]
     },
     {
@@ -268,7 +268,7 @@
       "status": "partial",
       "notes": "Worksheet view with per-finding accept/edit/reject buttons exists; a true suggestions-tray -> official-worksheet flow does not.",
       "evidence": [
-        "src/hazop/web/templates/index.html"
+        "src/hazop/s5_sw/templates/index.html"
       ]
     },
     {
@@ -278,8 +278,8 @@
       "status": "done",
       "notes": "Append-only JSONL with identity, timestamp, version triplet; UI wired. User identity is a placeholder until auth (FR-AGM-1) exists.",
       "evidence": [
-        "src/hazop/l4_model/telemetry.py",
-        "src/hazop/web/app.py"
+        "src/hazop/mdl/telemetry.py",
+        "src/hazop/s5_sw/app.py"
       ]
     },
     {
@@ -289,7 +289,7 @@
       "status": "partial",
       "notes": "Standard columns present; customer-configurable templates and risk-matrix config absent.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+        "src/hazop/s3_are/reasoner/worksheet.py"
       ]
     },
     {
@@ -331,8 +331,8 @@
       "status": "partial",
       "notes": "Original suggestion text retained in telemetry events; rejected findings kept as audit records; no full worksheet revision store.",
       "evidence": [
-        "src/hazop/l4_model/telemetry.py",
-        "src/hazop/l3_reasoner/reasoner/worksheet.py"
+        "src/hazop/mdl/telemetry.py",
+        "src/hazop/s3_are/reasoner/worksheet.py"
       ]
     },
     {
@@ -350,7 +350,7 @@
       "status": "partial",
       "notes": "Version triplet + accept/edit/reject stats captured per event; annex document generator absent.",
       "evidence": [
-        "src/hazop/l4_model/telemetry.py"
+        "src/hazop/mdl/telemetry.py"
       ]
     },
     {
@@ -376,7 +376,7 @@
       "status": "partial",
       "notes": "Curation gates enforced at ingestion (approved-only indexed; pending + gold-holdout excluded); item metadata present; curator review-queue UI absent.",
       "evidence": [
-        "src/hazop/l2_knowledge/kb",
+        "src/hazop/s4_kb",
         "data/corpus"
       ]
     },
@@ -387,7 +387,7 @@
       "status": "partial",
       "notes": "Versions carried in telemetry; no pinning enforcement or upgrade-acknowledgment flow.",
       "evidence": [
-        "src/hazop/l4_model/telemetry.py"
+        "src/hazop/mdl/telemetry.py"
       ]
     },
     {
@@ -397,7 +397,7 @@
       "status": "done",
       "notes": "Anthropic + OpenAI-compatible local + deterministic stub behind one seam.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/llm.py"
+        "src/hazop/s3_are/reasoner/llm.py"
       ]
     },
     {
@@ -407,7 +407,7 @@
       "status": "done",
       "notes": "BM25 + dense with RRF fusion, guideword/parameter filters; hashing-stub embedder default, sentence-transformers optional.",
       "evidence": [
-        "src/hazop/l2_knowledge/kb"
+        "src/hazop/s4_kb"
       ]
     },
     {
@@ -417,7 +417,7 @@
       "status": "done",
       "notes": "",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/topology.py"
+        "src/hazop/s3_are/reasoner/topology.py"
       ]
     },
     {
@@ -427,7 +427,7 @@
       "status": "partial",
       "notes": "Vector drawings handled deterministically without ML (stronger guarantee where applicable); ML/OCR raster path + training-data plan not started.",
       "evidence": [
-        "src/hazop/l1_extraction"
+        "src/hazop/s1_dim"
       ]
     },
     {
@@ -437,8 +437,8 @@
       "status": "done",
       "notes": "Two-stage: Stage A tag grounding (deterministic) + Stage B evidence critic (different model than generator).",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/evidence_critic.py",
-        "src/hazop/l3_reasoner/reasoner/core.py"
+        "src/hazop/s3_are/reasoner/evidence_critic.py",
+        "src/hazop/s3_are/reasoner/core.py"
       ]
     },
     {
@@ -456,8 +456,8 @@
       "status": "partial",
       "notes": "Format + loader + hold-out enforcement done; 1 node authored, 19+ to go.",
       "evidence": [
-        "src/hazop/l4_model/gold.py",
-        "src/hazop/l4_model/gold_pump_vessel.json"
+        "src/hazop/mdl/gold.py",
+        "src/hazop/mdl/gold_pump_vessel.json"
       ]
     },
     {
@@ -475,7 +475,7 @@
       "status": "partial",
       "notes": "Harness + CI gate done; 100% on mock/1-node gold. Real number needs MDL-7 gold set + real generator.",
       "evidence": [
-        "src/hazop/l4_model/metrics.py"
+        "src/hazop/mdl/metrics.py"
       ]
     },
     {
@@ -485,8 +485,8 @@
       "status": "done",
       "notes": "In-pipeline hard gate + independent output-side audit; fabricating-LLM test proves the gate.",
       "evidence": [
-        "src/hazop/l3_reasoner/reasoner/core.py",
-        "src/hazop/l4_model/grounding.py"
+        "src/hazop/s3_are/reasoner/core.py",
+        "src/hazop/mdl/grounding.py"
       ]
     },
     {
@@ -496,7 +496,7 @@
       "status": "partial",
       "notes": "Automated proxies + deterministic expert audit sheet done; the human audit itself pending.",
       "evidence": [
-        "src/hazop/l4_model/fabrication.py",
+        "src/hazop/mdl/fabrication.py",
         "outputs/mdl11_audit_sheet.csv"
       ]
     },
@@ -507,7 +507,7 @@
       "status": "partial",
       "notes": "Harness done (nearest-rank P95, injectable clock); real number needs a real-generator run.",
       "evidence": [
-        "src/hazop/l4_model/latency.py"
+        "src/hazop/mdl/latency.py"
       ]
     },
     {
@@ -517,7 +517,7 @@
       "status": "done",
       "notes": "Seeding harness + CI gate; deterministic critic at 100% (60/60), pinned.",
       "evidence": [
-        "src/hazop/l4_model/seeded_omissions.py"
+        "src/hazop/mdl/seeded_omissions.py"
       ]
     },
     {
@@ -527,8 +527,8 @@
       "status": "done",
       "notes": "Versioned JSONL schema + web endpoints + UI buttons, verified end to end.",
       "evidence": [
-        "src/hazop/l4_model/telemetry.py",
-        "src/hazop/web/app.py"
+        "src/hazop/mdl/telemetry.py",
+        "src/hazop/s5_sw/app.py"
       ]
     },
     {
@@ -538,8 +538,8 @@
       "status": "done",
       "notes": "L1 exports DEXPI-shaped plant model; L2 consumes it. Vendor mapping tables pending vendor formats.",
       "evidence": [
-        "src/hazop/l1_extraction/export_dexpi.py",
-        "src/hazop/l2_knowledge/plant_graph"
+        "src/hazop/s1_dim/export_dexpi.py",
+        "src/hazop/s2_pml"
       ]
     },
     {
@@ -674,7 +674,7 @@
       "status": "todo",
       "notes": "Scorecard automates the 4.3 gate check; rest pending.",
       "evidence": [
-        "src/hazop/l4_model/mdl_scorecard.py"
+        "src/hazop/mdl/mdl_scorecard.py"
       ]
     },
     {
