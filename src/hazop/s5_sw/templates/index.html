@@ -353,8 +353,10 @@ const caption = tag => tag.replace(/^\d{3,4}-/,'');
 async function loadGraph(){
   const m = await (await fetch('/api/query/meta')).json();
   const total = m.labels.reduce((s,l)=>s+l.count,0);
-  $('#db-summary').textContent = `${total} nodes · ` +
-    m.relationships.reduce((s,r)=>s+r.count,0) + ' relationships';
+  $('#db-summary').innerHTML = `${total} nodes · ` +
+    m.relationships.reduce((s,r)=>s+r.count,0) + ' relationships' +
+    `<button class="act" id="db-fullgraph" style="display:block;width:100%;
+      margin-top:10px">⛁ Show the full plant graph</button>`;
   $('#db-labels').innerHTML = m.labels.map(l =>
     `<button class="pill" style="background:${ncolor(l.type)}"
       data-q="list all ${l.type.replace(/_/g,' ')}s"
@@ -367,9 +369,7 @@ async function loadGraph(){
   $('#db-cypher-ex').innerHTML =
     `<button class="ex" data-q="MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets">
       every relief valve, via live Neo4j
-      <code>MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets</code></button>
-     <button class="ex" id="db-fullgraph">show the full plant graph
-      <code>MATCH (n:PlantItem)-[r]-(m) RETURN n, r, m</code></button>`;
+      <code>MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets</code></button>`;
   $('#db-neo4j').innerHTML = m.neo4j_up
     ? `live Neo4j: <a href="${m.neo4j_browser}" target="_blank">browser ↗</a> — raw Cypher runs against it`
     : 'live Neo4j: not running — plain-English questions still work (in-memory graph); raw Cypher needs <code>python -m hazop.s2_pml.load_neo4j --load</code>';
@@ -413,6 +413,30 @@ async function fullGraphFrame(){
       rel: e.data.direction==='known' ? 'FLOWS_TO':'CONNECTED_TO',
       direction: e.data.direction})),
   });
+  // whole-plant niceties: more room + density filters (instruments hidden
+  // by default; solid+arrow = FLOWS_TO, dashed = drawing order only)
+  const cy = frame._cy, gpane = frame.querySelector('.fgraph');
+  gpane.style.height = '640px';
+  const bar = document.createElement('div');
+  bar.className = 'dim';
+  bar.style.margin = '2px 0 8px';
+  bar.innerHTML = `
+    <label><input type="checkbox" class="fg-instr"> show instruments</label>
+    &nbsp;&nbsp;<label><input type="checkbox" class="fg-unk" checked> show unverified connections</label>
+    &nbsp;&nbsp;<span>isolated items form the strip at the bottom · scroll to zoom · click a node to explore from it</span>`;
+  gpane.before(bar);
+  const apply = () => cy.batch(() => {
+    cy.nodes('[type="instrument"]').style('display',
+      bar.querySelector('.fg-instr').checked ? 'element' : 'none');
+    cy.edges('[rel="CONNECTED_TO"]').style('display',
+      bar.querySelector('.fg-unk').checked ? 'element' : 'none');
+  });
+  bar.querySelectorAll('input').forEach(i => i.onchange = apply);
+  apply();
+  cy.resize();
+  cy.layout({name:'cose', animate:false, nodeOverlap:4, idealEdgeLength:55,
+             numIter:400, nodeRepulsion:400000}).run();
+  cy.fit(undefined, 30);
 }
 
 function addFrame(title){
