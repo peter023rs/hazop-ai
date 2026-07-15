@@ -34,6 +34,7 @@ Base subsystem, `hazop.s4_kb`.
 | `nodes.py` | **HAZOP node boundary proposal**: deterministic partition of the equipment-level graph at design-intent changes — pressure breaks (pumps/compressors join their *verified suction side*; discharge starts the next node), phase changes (heat exchangers, same rule), unit boundaries (off-page connectors end nodes, so proposals stop at sheet edges), machine trains (verified anti-parallel pairs stay together). Every node carries `status="proposed"`, rule-by-rule rationale, and its boundary elements; ambiguous or direction-unverified placements are flagged for the facilitator, and `merge_nodes` / `move_member` implement manual redefinition with a `redefinitions` log (proposed vs redefined stays distinguishable, AR-1). Members feed `condensed_node_view` unchanged | FR-PML-2 |
 | `screening.py` | **deviation screening**: `SimulatorInterface` is the FR-PML-3 seam (HYSYS/DWSIM adapters plug in later — OI-2); the dispatcher *enforces* FR-PML-4 labeling (case id, model id+version, convergence status; non-converged = never `reliable`) rather than trusting the adapter; `HeuristicScreener` is the FR-PML-5 fallback — pump deadhead ≈ 1.2–1.5 × normal discharge (pump curve preferred), blocked-outlet pressure bounds, exchanger no-flow temperature bound — every result labeled `ESTIMATE`, qualitative when no numbers are supplied, honest "no rule" instead of a guess | FR-PML-3/4/5 |
 | `neo4j_store.py` | plant graph → Neo4j: `to_cypher()` offline idempotent script, `load()` batched live loader behind the optional `neo4j` extra. **`FLOWS_TO` = verified flow direction, `CONNECTED_TO` = drawing order only** — so `-[:FLOWS_TO*]->` is always a trusted traversal | DDR-01 graph substrate |
+| `query.py` | **query layer** (IYP-style): `parse_question` grounds a plain-English question into a typed `Intent` (tags resolved against the real graph, partials like `K-001A` accepted, ambiguity fails closed); `GraphQuery` executes it via ARE's direction-aware `TopologyReasoner` and returns answer + rows + subgraph **+ the equivalent Cypher**; `run_cypher` is a read-only passthrough to live Neo4j; `AnthropicTranslator` is the optional LLM seam (fills an Intent, never writes Cypher) | MDL-3 traversals, DDR-06 seam |
 | `demo.py` | A: ingest+retrieve (via `hazop.s4_kb`) · B: contract the real 2401 drawing · C: run ARE's real `AIReasoner` with this retriever, on the mock node **and** a real study node · D: propose HAZOP nodes on the real drawing + screen deviations through the heuristic fallback | |
 | `load_neo4j.py` | CLI: contract stage-1 output and write `outputs/plant_graph_2401.cypher`; `--load` pushes to a live server | |
 
@@ -51,6 +52,43 @@ python -m hazop.s2_pml.load_neo4j --load --password <pw>   # push to a live serv
 ```
 
 Data resolves to the repo's `data/` directory (override with `HAZOP_DATA`).
+
+## Query the database
+
+Three ways in, most convenient first:
+
+1. **Graph Explorer** (dashboard, `hazop-web` → *L2 · Graph Explorer*):
+   ask in plain English — every answer shows the equivalent Cypher, the
+   result graph (Neo4j-Browser-style) and a table. No server needed; NL
+   questions run in-process against the equipment graph.
+2. **Python**:
+
+   ```python
+   from hazop.s2_pml import GraphQuery, build_equipment_graph, load_plant_model
+   gq = GraphQuery(build_equipment_graph(load_plant_model(path)))
+   r = gq.ask("which vessels are downstream of 2401-K-001A?")
+   r.answer, r.rows, r.cypher   # + r.nodes / r.edges for drawing
+   ```
+
+3. **Cypher on live Neo4j** (after `load_neo4j --load`), e.g.:
+
+   ```cypher
+   // verified flow downstream of the first-stage compressor
+   MATCH (s:PlantItem {tag:'2401-K-001A'})-[:FLOWS_TO*1..10]->(x)
+   RETURN DISTINCT x.tag, x.equipment_type ORDER BY x.tag;
+
+   // every relief valve and which sheet it lives on
+   MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets;
+   ```
+
+   The dashboard's query bar passes raw Cypher through to the live server
+   read-only; the explorer's example gallery shows more.
+
+Supported question shapes: downstream / upstream of a tag (optionally
+filtered, "which **vessels** are downstream of …"), direct neighbours,
+path between two tags, list / count by equipment type, relief-path check,
+and tag info. Unknown or ambiguous tags fail closed with a hint — nothing
+is guessed.
 
 ## Current numbers on the real drawing
 

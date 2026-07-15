@@ -63,6 +63,54 @@
  button.tele{background:none;border:1px solid var(--line);border-radius:4px;
      color:var(--dim);cursor:pointer;font-size:11px;padding:1px 5px;margin-left:2px}
  button.tele:hover{border-color:var(--blue);color:var(--blue)}
+ /* ---- graph explorer (Neo4j-Browser / IYP style) ---- */
+ .qbar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-top:0}
+ .qbar .prompt{color:var(--blue);font-family:ui-monospace,Menlo,monospace;
+     font-weight:700;font-size:13px}
+ .qbar input{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+     background:#131318;border:1px solid var(--line);border-radius:6px;
+     color:var(--fg);padding:9px 12px}
+ .qbar input:focus{outline:none;border-color:var(--blue)}
+ .explorer-body{display:grid;grid-template-columns:260px 1fr;gap:12px;
+     align-items:start}
+ .dbpanel{position:sticky;top:8px;max-height:calc(100vh - 20px);overflow-y:auto}
+ .dbpanel h3{margin-top:14px}
+ .pill{display:inline-flex;align-items:center;gap:6px;border-radius:14px;
+     padding:3px 11px;font-size:11.5px;margin:2px;cursor:pointer;
+     border:0;color:#15151a;font-weight:700}
+ .pill:hover{filter:brightness(1.15)}
+ .pill.rel{background:#1a1a20;border:1px solid var(--line);color:var(--dim);
+     border-radius:6px;cursor:default;font-weight:400}
+ .ex{display:block;width:100%;text-align:left;padding:7px 9px;margin:4px 0;
+     border:1px solid var(--line);border-radius:6px;color:var(--fg);
+     font-size:12px;cursor:pointer;background:#1a1a20;font-family:inherit}
+ .ex:hover{border-color:var(--blue)}
+ .ex code{color:var(--dim);font-size:10px;display:block;margin-top:3px;
+     white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace}
+ .frame{position:relative;margin:0 0 12px}
+ .fhead{display:flex;align-items:center;gap:8px}
+ .fq{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--blue);
+     flex:1;word-break:break-all}
+ .fcypher{margin:8px 0}
+ .fanswer{font-size:13px;margin:4px 0 10px;line-height:1.5}
+ .fanswer.err{color:var(--red)}
+ .fgraph{height:430px;background:#17171c;border:1px solid var(--line);
+     border-radius:8px}
+ .ftable{max-height:430px;overflow:auto}
+ .finspect{position:absolute;right:28px;bottom:28px;width:260px;
+     max-height:340px;overflow-y:auto;background:rgba(28,28,36,.97);
+     border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+     display:none;z-index:5}
+ .finspect h2{display:flex;justify-content:space-between}
+ .vbtn{background:none;border:1px solid var(--line);border-radius:6px;
+     color:var(--dim);cursor:pointer;font-size:12px;padding:4px 12px}
+ .vbtn.active{color:var(--blue);border-color:var(--blue)}
+ .fclose{background:none;border:0;color:var(--dim);cursor:pointer;
+     font-size:16px;padding:0 4px}
+ .fclose:hover{color:var(--red)}
+ .legend{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0}
+ .legend .pill{cursor:default}
+ .legend .pill:hover{filter:none}
 </style>
 </head>
 <body>
@@ -73,7 +121,7 @@
 <nav id="nav">
  <button data-tab="overview" class="active">Overview</button>
  <button data-tab="l1">L1 · Extraction</button>
- <button data-tab="graph">L2 · Plant Graph</button>
+ <button data-tab="graph">L2 · Graph Explorer</button>
  <button data-tab="kb">L2 · Knowledge Base</button>
  <button data-tab="ws">L3 · HAZOP Worksheet</button>
  <button data-tab="mdl">§4 · Model Gates</button>
@@ -100,18 +148,34 @@
 </div>
 
 <div id="tab-graph" class="tab" style="display:none">
- <div class="card" style="margin-bottom:8px">
-  <h2>Equipment-level plant graph <span class="dim" id="g-stats"></span></h2>
-  <label class="dim"><input type="checkbox" id="g-instr"> show instruments</label>
-  &nbsp;&nbsp;<label class="dim"><input type="checkbox" id="g-unknown" checked> show unverified connections</label>
-  &nbsp;&nbsp;<input type="text" id="g-search" placeholder="find tag… e.g. 2401-K-001A" style="width:230px">
-  <span class="dim">— solid blue = verified flow direction · dashed grey = drawing order only · click a node for direction-aware trace</span>
+ <div class="card qbar">
+  <span class="prompt">hazop$</span>
+  <input id="q-input" spellcheck="false"
+   placeholder='ask in plain English — "what is downstream of 2401-K-001A?" — or paste Cypher (MATCH …)'>
+  <button class="act" id="q-run">Run ▶</button>
  </div>
- <div class="graphwrap">
-  <div id="cy"></div>
-  <div class="card" id="detail"><p class="dim">Click a node to see its
-   direction-aware upstream/downstream trace (green = every hop verified,
-   orange = crosses at least one unverified edge) and relief-path status.</p></div>
+ <div class="explorer-body">
+  <aside class="card dbpanel">
+   <h2 style="margin-bottom:2px">Plant database</h2>
+   <div class="dim" id="db-summary"></div>
+   <h3>Node labels</h3><div id="db-labels"></div>
+   <h3>Relationship types</h3><div id="db-rels"></div>
+   <h3>Example questions</h3><div id="db-examples"></div>
+   <h3>Raw Cypher</h3>
+   <div id="db-cypher-ex"></div>
+   <div class="dim" id="db-neo4j" style="margin-top:10px"></div>
+  </aside>
+  <div id="frames">
+   <div class="card frame" id="frame-welcome">
+    <div class="fhead"><span class="fq">:play welcome</span></div>
+    <div class="fanswer">Ask the plant graph a question in plain English —
+     every answer shows the equivalent <b>Cypher</b>, the result
+     <b>graph</b> and a <b>table</b>. <span class="dim">FLOWS_TO = verified
+     flow direction · CONNECTED_TO = drawing order only. Click a node for
+     its properties and one-click traces; pick an example on the left to
+     start.</span></div>
+   </div>
+  </div>
  </div>
 </div>
 
@@ -276,73 +340,214 @@ function showPage(i){
   $('#l1-link').href = '/l1/overlay/' + p.page;
 }
 
-/* ---------- L2 graph ---------- */
-const TYPE_COLORS = {compressor:'#e67e22', vessel:'#2ecc71', valve:'#7f8c9b',
-  check_valve:'#f1c40f', relief_valve:'#e74c3c', instrument:'#9b59b6',
-  line:'#16a085', tank:'#27ae60', pump:'#d35400', heat_exchanger:'#c0392b'};
-let cy = null;
+/* ---------- L2 graph explorer (Neo4j-Browser / IYP style) ---------- */
+const NEO_COLORS = {compressor:'#F79767', vessel:'#57C7E3', valve:'#A5ABB6',
+  relief_valve:'#F16667', check_valve:'#FFC454', instrument:'#C990C0',
+  line:'#8DCC93', tank:'#569480', pump:'#DA7194', heat_exchanger:'#ECB5C9'};
+const NEO_DEFAULT = '#4C8EDA';
+const ncolor = t => NEO_COLORS[t] || NEO_DEFAULT;
+const darken = (hex, f=0.72) => '#' + hex.slice(1).match(/../g)
+  .map(h => Math.round(parseInt(h,16)*f).toString(16).padStart(2,'0')).join('');
+const caption = tag => tag.replace(/^\d{3,4}-/,'');
+
 async function loadGraph(){
+  const m = await (await fetch('/api/query/meta')).json();
+  const total = m.labels.reduce((s,l)=>s+l.count,0);
+  $('#db-summary').textContent = `${total} nodes · ` +
+    m.relationships.reduce((s,r)=>s+r.count,0) + ' relationships';
+  $('#db-labels').innerHTML = m.labels.map(l =>
+    `<button class="pill" style="background:${ncolor(l.type)}"
+      data-q="list all ${l.type.replace(/_/g,' ')}s"
+      title="list all ${l.type.replace(/_/g,' ')}s">${esc(l.label)} (${l.count})</button>`).join('');
+  $('#db-rels').innerHTML = m.relationships.map(r =>
+    `<span class="pill rel" title="${esc(r.note)}">${esc(r.type)} (${r.count})</span>`).join('');
+  $('#db-examples').innerHTML = m.examples.map(e =>
+    `<button class="ex" data-q="${esc(e.question)}">${esc(e.question)}
+      <code>${esc(e.cypher)}</code></button>`).join('');
+  $('#db-cypher-ex').innerHTML =
+    `<button class="ex" data-q="MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets">
+      every relief valve, via live Neo4j
+      <code>MATCH (psv:ReliefValve) RETURN psv.tag, psv.sheets</code></button>
+     <button class="ex" id="db-fullgraph">show the full plant graph
+      <code>MATCH (n:PlantItem)-[r]-(m) RETURN n, r, m</code></button>`;
+  $('#db-neo4j').innerHTML = m.neo4j_up
+    ? `live Neo4j: <a href="${m.neo4j_browser}" target="_blank">browser ↗</a> — raw Cypher runs against it`
+    : 'live Neo4j: not running — plain-English questions still work (in-memory graph); raw Cypher needs <code>python -m hazop.s2_pml.load_neo4j --load</code>';
+  document.querySelectorAll('#tab-graph [data-q]').forEach(b =>
+    b.onclick = () => { $('#q-input').value = b.dataset.q; runQuery(); });
+  $('#db-fullgraph').onclick = fullGraphFrame;
+  $('#q-run').onclick = runQuery;
+  $('#q-input').onkeydown = e => { if(e.key==='Enter') runQuery(); };
+}
+
+const isCypher = s => /^\s*(MATCH|OPTIONAL|CALL|RETURN|WITH|UNWIND|EXPLAIN|PROFILE|SHOW)\b/i.test(s);
+
+async function runQuery(){
+  const q = $('#q-input').value.trim();
+  if(!q) return;
+  const frame = addFrame(q);
+  frame.querySelector('.fanswer').innerHTML = '<span class="spin">running…</span>';
+  const url = isCypher(q) ? '/api/cypher' : '/api/query';
+  const body = isCypher(q) ? {query: q} : {question: q};
+  const resp = await fetch(url, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await resp.json();
+  if(!resp.ok){ renderError(frame, d.error); return; }
+  if(isCypher(q)) renderResult(frame, {cypher: q, answer: `${d.rows.length} row(s) from live Neo4j`,
+    rows: d.rows, columns: d.columns, nodes: d.nodes, edges: d.edges});
+  else renderResult(frame, d);
+}
+
+async function fullGraphFrame(){
+  const frame = addFrame('show the full plant graph');
+  frame.querySelector('.fanswer').innerHTML = '<span class="spin">contracting…</span>';
   const d = await (await fetch('/api/graph')).json();
-  $('#g-stats').textContent = `— ${d.stats.terminals} nodes · ${d.stats.connections} connections · ${d.stats.directed_connections} verified`;
-  cy = cytoscape({
-    container: $('#cy'),
-    elements: [...d.nodes, ...d.edges],
+  renderResult(frame, {
+    cypher: 'MATCH (n:PlantItem)-[r]-(m) RETURN n, r, m',
+    answer: `${d.stats.terminals} nodes · ${d.stats.connections} connections · ${d.stats.directed_connections} with verified flow direction`,
+    rows: d.nodes.map(n => ({tag:n.data.id, equipment_type:n.data.type,
+      sheets:(n.data.sheets||[]).join(', ')})),
+    nodes: d.nodes.map(n => ({tag:n.data.id, type:n.data.type,
+      name:n.data.name, sheets:n.data.sheets||[]})),
+    edges: d.edges.map(e => ({source:e.data.source, target:e.data.target,
+      rel: e.data.direction==='known' ? 'FLOWS_TO':'CONNECTED_TO',
+      direction: e.data.direction})),
+  });
+}
+
+function addFrame(title){
+  const frames = $('#frames');
+  const welcome = $('#frame-welcome'); if(welcome) welcome.remove();
+  const frame = document.createElement('div');
+  frame.className = 'card frame';
+  frame.innerHTML = `
+    <div class="fhead"><span class="fq">${esc(title)}</span>
+     <button class="vbtn v-graph">Graph</button>
+     <button class="vbtn v-table">Table</button>
+     <button class="tele f-copy" title="copy Cypher">⧉ cypher</button>
+     <button class="fclose" title="close frame">×</button></div>
+    <pre class="fcypher" style="display:none"></pre>
+    <div class="fanswer"></div>
+    <div class="fgraph" style="display:none"></div>
+    <div class="ftable" style="display:none"></div>
+    <div class="finspect"></div>`;
+  frame.querySelector('.fclose').onclick = () => destroyFrame(frame);
+  frames.prepend(frame);
+  while(frames.children.length > 5) destroyFrame(frames.lastElementChild);
+  return frame;
+}
+function destroyFrame(frame){
+  if(frame._cy) frame._cy.destroy();
+  frame.remove();
+}
+function renderError(frame, msg){
+  const a = frame.querySelector('.fanswer');
+  a.className = 'fanswer err'; a.textContent = msg;
+}
+
+function renderResult(frame, d){
+  frame.querySelector('.fanswer').innerHTML = esc(d.answer) +
+    (d.intent ? ` <span class="badge b-grey">${esc(d.intent)}</span>` : '');
+  const pre = frame.querySelector('.fcypher');
+  pre.textContent = d.cypher; pre.style.display = '';
+  frame.querySelector('.f-copy').onclick = () =>
+    navigator.clipboard.writeText(d.cypher);
+  const legend = [...new Set((d.nodes||[]).map(n=>n.type))];
+  if(legend.length) pre.insertAdjacentHTML('afterend',
+    `<div class="legend">${legend.map(t=>`<span class="pill"
+       style="background:${ncolor(t)}">${esc(t.replace(/_/g,' '))}</span>`).join('')}</div>`);
+
+  const gv = frame.querySelector('.v-graph'), tv = frame.querySelector('.v-table');
+  const gpane = frame.querySelector('.fgraph'), tpane = frame.querySelector('.ftable');
+  const show = which => {
+    gpane.style.display = which==='g' ? '' : 'none';
+    tpane.style.display = which==='t' ? '' : 'none';
+    gv.classList.toggle('active', which==='g');
+    tv.classList.toggle('active', which==='t');
+    if(which==='g' && frame._cy) frame._cy.resize();
+  };
+  gv.onclick = () => show('g'); tv.onclick = () => show('t');
+
+  // table
+  const rows = d.rows || [];
+  const cols = d.columns || (rows.length ? Object.keys(rows[0]) : []);
+  const cell = v => typeof v === 'object' && v !== null
+    ? esc(JSON.stringify(v)) : esc(v);
+  tpane.innerHTML = rows.length
+    ? `<table><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>` +
+      rows.map(r=>`<tr>${cols.map(c=>`<td>${cell(r[c])}</td>`).join('')}</tr>`).join('') + '</table>'
+    : '<p class="dim">no rows</p>';
+
+  // graph (pane must be visible before cytoscape measures its container)
+  if((d.nodes||[]).length){
+    show('g');
+    drawFrameGraph(frame, d.nodes, d.edges||[]);
+  } else {
+    gv.style.display = 'none';
+    show('t');
+  }
+}
+
+function drawFrameGraph(frame, nodes, edges){
+  const tags = new Set(nodes.map(n=>n.tag));
+  const cy = cytoscape({
+    container: frame.querySelector('.fgraph'),
+    elements: [
+      ...nodes.map(n => ({data:{id:n.tag, type:n.type, name:n.name||n.tag,
+        sheets:(n.sheets||[]).join(', ')}})),
+      ...edges.filter(e => tags.has(e.source) && tags.has(e.target))
+        .map((e,i) => ({data:{id:'e'+i, source:e.source, target:e.target,
+          rel:e.rel, direction:e.direction||'known'}})),
+    ],
     style: [
       {selector:'node', style:{
-        'background-color': e => TYPE_COLORS[e.data('type')] || '#888',
-        'label':'data(id)','font-size':7,'color':'#bbb','width':14,'height':14,
-        'text-valign':'bottom','text-margin-y':2}},
-      {selector:'node[type="compressor"], node[type="vessel"]',
-       style:{'width':26,'height':26,'font-size':9,'color':'#eee'}},
-      {selector:'edge', style:{'width':1,'line-color':'#4a4a55',
-        'line-style':'dashed','curve-style':'haystack'}},
-      {selector:'edge[direction="known"]', style:{'width':2,'line-color':'#4fc3f7',
-        'line-style':'solid','curve-style':'bezier',
-        'target-arrow-shape':'triangle','target-arrow-color':'#4fc3f7',
-        'arrow-scale':0.8}},
-      {selector:'.faded', style:{'opacity':0.08}},
-      {selector:'.hl', style:{'border-width':3,'border-color':'#fff'}},
+        'background-color': e => ncolor(e.data('type')),
+        'border-width':2, 'border-color': e => darken(ncolor(e.data('type'))),
+        'width':44,'height':44,'shape':'ellipse',
+        'label': e => caption(e.data('id')),
+        'font-size':7.5,'color':'#15151a','font-weight':600,
+        'text-valign':'center','text-halign':'center',
+        'text-wrap':'wrap','text-max-width':40}},
+      {selector:'edge', style:{
+        'width':1.5,'line-color':'#5c5c6a','curve-style':'bezier',
+        'label': edges.length <= 60 ? 'data(rel)' : '',
+        'font-size':6,'color':'#8a8a97','text-rotation':'autorotate',
+        'text-background-color':'#17171c','text-background-opacity':0.85}},
+      {selector:'edge[rel="FLOWS_TO"]', style:{
+        'line-color':'#A5ABB6','target-arrow-shape':'triangle',
+        'target-arrow-color':'#A5ABB6','arrow-scale':0.9}},
+      {selector:'edge[rel="CONNECTED_TO"]', style:{'line-style':'dashed'}},
+      {selector:'node:selected', style:{'border-width':4,'border-color':'#fff'}},
     ],
+    wheelSensitivity: 0.3,
   });
-  applyGraphFilters();
-  cy.layout({name:'cose', animate:false, nodeOverlap:8,
-             idealEdgeLength:60, numIter:600}).run();
-  cy.on('tap','node', e => trace(e.target.id()));
-  $('#g-instr').onchange = applyGraphFilters;
-  $('#g-unknown').onchange = applyGraphFilters;
-  $('#g-search').onchange = () => {
-    const q = $('#g-search').value.trim().toUpperCase();
-    if(!q) return;
-    const hits = cy.nodes().filter(n => n.id().toUpperCase().includes(q));
-    if(hits.length){ cy.elements().removeClass('hl');
-      hits.addClass('hl'); cy.animate({fit:{eles:hits.closedNeighborhood(),padding:60}},{duration:300});
-      trace(hits[0].id()); }
-  };
+  const big = nodes.length > 150;
+  cy.layout({name:'cose', animate:false, nodeOverlap:big?4:12,
+             idealEdgeLength:big?55:90, numIter:big?400:800,
+             nodeRepulsion:big?400000:800000}).run();
+  cy.fit(undefined, 30);
+  cy.on('tap','node', e => inspect(frame, e.target));
+  cy.on('tap', e => { if(e.target===cy) frame.querySelector('.finspect').style.display='none'; });
+  frame._cy = cy;
 }
-function applyGraphFilters(){
-  const showI = $('#g-instr').checked, showU = $('#g-unknown').checked;
-  cy.batch(() => {
-    cy.nodes('[type="instrument"]').style('display', showI ? 'element':'none');
-    cy.edges('[direction!="known"]').style('display', showU ? 'element':'none');
-  });
-}
-async function trace(tag){
-  const d = await (await fetch('/api/trace?tag=' + encodeURIComponent(tag))).json();
-  const mk = (arr, cls) => arr.length
-    ? arr.map(t=>`<span class="chip ${cls}">${esc(t)}</span>`).join('')
-    : '<span class="dim">none</span>';
-  $('#detail').innerHTML = `
-   <h2>${esc(tag)}</h2>
-   <div class="kv"><span>type</span><span>${esc(d.node.equipment_type)}</span></div>
-   <div class="kv"><span>name</span><span>${esc(d.node.name)}</span></div>
-   <div class="kv"><span>sheets</span><span>${(d.node.attributes.sheets||[]).join(', ')}</span></div>
-   <div class="kv"><span>detection confidence</span><span>${d.node.detection_confidence}</span></div>
-   <div class="kv"><span>relief path (verified)</span><span>${d.has_relief_path ? '✔ yes' : '—'}</span></div>
-   <div class="kv"><span>relief path (drawn, unverified)</span><span>${d.has_relief_path_drawn ? 'yes' : '—'}</span></div>
-   <h3>downstream — verified flow (${d.downstream.verified.length})</h3>${mk(d.downstream.verified,'v')}
-   <h3>downstream — unverified reachable (${d.downstream.unverified.length})</h3>${mk(d.downstream.unverified.slice(0,60),'u')}
-   <h3>upstream — verified flow (${d.upstream.verified.length})</h3>${mk(d.upstream.verified,'v')}
-   <h3>upstream — unverified reachable (${d.upstream.unverified.length})</h3>${mk(d.upstream.unverified.slice(0,60),'u')}`;
+
+function inspect(frame, node){
+  const d = node.data();
+  const box = frame.querySelector('.finspect');
+  box.innerHTML = `
+   <h2>${esc(d.id)} <button class="fclose">×</button></h2>
+   <div class="kv"><span>label</span><span>${esc(d.type)}</span></div>
+   <div class="kv"><span>name</span><span>${esc(d.name)}</span></div>
+   <div class="kv"><span>sheets</span><span>${esc(d.sheets)||'—'}</span></div>
+   <h3>explore from here</h3>
+   <button class="tele iq" data-q="what is downstream of ${esc(d.id)}?">↓ downstream</button>
+   <button class="tele iq" data-q="what is upstream of ${esc(d.id)}?">↑ upstream</button>
+   <button class="tele iq" data-q="what is connected to ${esc(d.id)}?">⇄ neighbours</button>
+   <button class="tele iq" data-q="does ${esc(d.id)} have a relief path?">⛑ relief path</button>`;
+  box.style.display = '';
+  box.querySelector('.fclose').onclick = () => box.style.display='none';
+  box.querySelectorAll('.iq').forEach(b => b.onclick = () => {
+    $('#q-input').value = b.dataset.q; runQuery(); });
 }
 
 /* ---------- KB ---------- */

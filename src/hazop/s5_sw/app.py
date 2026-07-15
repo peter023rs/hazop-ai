@@ -24,8 +24,10 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
 from hazop.s4_kb import KBRetriever, as_l3_retriever
-from hazop.s2_pml import (build_equipment_graph,
-                                            load_plant_model, to_l3_topology)
+from hazop.s2_pml import (GraphQuery, QueryError, build_equipment_graph,
+                          load_plant_model, query_examples, run_cypher,
+                          to_l3_topology)
+from hazop.s2_pml.neo4j_store import _label as _cypher_label
 from hazop.s3_are.mock_data.pump_vessel import (build_study_node,
                                                      build_topology)
 from hazop.s3_are.reasoner.core import AIReasoner
@@ -73,6 +75,8 @@ class _State:
         self.kb = KBRetriever(CORPUS_DIR)
         self.retriever = as_l3_retriever(self.kb)
         self.node_by_tag = {n["tag"]: n for n in self.graph["nodes"]}
+        self.graph_query = GraphQuery(self.graph)
+        self.query_examples = query_examples(self.graph)
 
 
 _state = None
@@ -246,6 +250,70 @@ def api_graph():
     }} for i, e in enumerate(st.graph["edges"])]
     return jsonify({"nodes": nodes, "edges": edges,
                     "stats": st.graph["stats"]})
+
+
+# Graph Explorer (IYP-style query experience over the plant graph):
+# natural-language questions run in-process against the equipment graph;
+# raw Cypher is passed through read-only to a live Neo4j when one is up.
+NEO4J_URI = os.environ.get("HAZOP_NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.environ.get("HAZOP_NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.environ.get("HAZOP_NEO4J_PASSWORD", "hazop2401")
+NEO4J_DATABASE = os.environ.get("HAZOP_NEO4J_DATABASE", "neo4j")
+
+
+@app.route("/api/query/meta")
+def api_query_meta():
+    st = state()
+    by_type: dict[str, int] = {}
+    for n in st.graph["nodes"]:
+        by_type[n["equipment_type"]] = by_type.get(n["equipment_type"], 0) + 1
+    stats = st.graph["stats"]
+    flows = stats.get("directed_connections", 0)
+    return jsonify({
+        "labels": [{"label": _cypher_label(t), "type": t, "count": c}
+                   for t, c in sorted(by_type.items(),
+                                      key=lambda kv: -kv[1])],
+        "relationships": [
+            {"type": "FLOWS_TO", "count": flows,
+             "note": "verified flow direction"},
+            {"type": "CONNECTED_TO",
+             "count": stats.get("connections", 0) - flows,
+             "note": "drawing order only"}],
+        "examples": st.query_examples,
+        "neo4j_up": _port_open(7474),
+        "neo4j_browser": "http://localhost:7474",
+    })
+
+
+@app.route("/api/query", methods=["POST"])
+def api_query():
+    payload = request.get_json(force=True, silent=True) or {}
+    question = (payload.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "empty question"}), 400
+    try:
+        return jsonify(state().graph_query.ask(question).to_dict())
+    except QueryError as err:
+        return jsonify({"error": err.hint}), 400
+
+
+@app.route("/api/cypher", methods=["POST"])
+def api_cypher():
+    payload = request.get_json(force=True, silent=True) or {}
+    cypher = (payload.get("query") or "").strip()
+    if not cypher:
+        return jsonify({"error": "empty query"}), 400
+    try:
+        out = run_cypher(cypher, uri=NEO4J_URI, user=NEO4J_USER,
+                         password=NEO4J_PASSWORD, database=NEO4J_DATABASE)
+    except QueryError as err:
+        return jsonify({"error": err.hint}), 400
+    except Exception as err:      # driver missing / server down / bad auth
+        return jsonify({
+            "error": f"live Neo4j unavailable ({err}). Start the server "
+                     f"and load the graph with: python -m "
+                     f"hazop.s2_pml.load_neo4j --load"}), 503
+    return jsonify(out)
 
 
 @app.route("/api/trace")
