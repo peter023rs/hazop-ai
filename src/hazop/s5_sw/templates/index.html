@@ -133,6 +133,7 @@
 </style>
 </head>
 <body>
+<script src="/static/i18n.js"></script>
 <header>
  <h1>HAZOP-AI</h1>
  <span class="sub">integrated view — unit 2401 · L1 extraction → L2 knowledge → L3 reasoner</span>
@@ -159,8 +160,7 @@
   <p class="dim">Deterministic geometry extraction from the vector P&amp;ID:
    instruments, valves (with PSV/check subclasses), equipment, pipe runs,
    flow arrows. Full accept/reject validation lives in the
-   <a href="http://127.0.0.1:8777" target="_blank">Stage&nbsp;1 validator app</a>
-   (start it with <code>.venv312/bin/python app.py</code> in hazop_L1).</p>
+   <a href="{{ dim_url }}" target="_blank">Stage 1 validator app</a>.</p>
   <div class="pagebtns" id="l1-pages"></div>
   <div id="l1-stats" class="dim" style="margin:8px 0"></div>
   <a id="l1-link" target="_blank"><img id="l1-img" class="overlay" alt=""></a>
@@ -223,11 +223,14 @@
   <h2>Hybrid retrieval (BM25 + dense, RRF fusion, guideword boost)</h2>
   <input type="text" id="kb-q" placeholder="e.g. reverse flow compressor trip" style="width:320px">
   <select id="kb-gw"><option value="">any guideword</option>
-   <option>NO</option><option>MORE</option><option>LESS</option><option>REVERSE</option>
-   <option>AS_WELL_AS</option><option>PART_OF</option><option>OTHER_THAN</option>
-   <option>EARLY</option><option>LATE</option></select>
+   <option value="NO">NO</option><option value="MORE">MORE</option>
+   <option value="LESS">LESS</option><option value="REVERSE">REVERSE</option>
+   <option value="AS_WELL_AS">AS_WELL_AS</option><option value="PART_OF">PART_OF</option>
+   <option value="OTHER_THAN">OTHER_THAN</option>
+   <option value="EARLY">EARLY</option><option value="LATE">LATE</option></select>
   <select id="kb-param"><option value="">any parameter</option>
-   <option>flow</option><option>pressure</option><option>temperature</option><option>level</option></select>
+   <option value="flow">flow</option><option value="pressure">pressure</option>
+   <option value="temperature">temperature</option><option value="level">level</option></select>
   <button class="act" id="kb-go">Search</button>
   <div id="kb-results"></div>
  </div>
@@ -928,7 +931,7 @@ function renderRTMTable(){
      <td>${esc(r.text)}</td>
      <td><span class="badge ${RTM_BADGE[r.status]}">${esc(r.status)}</span><br>
        <select data-id="${esc(r.id)}" class="rtm-status" style="margin-top:4px;padding:3px;font-size:11px">
-        ${RTM_STATUSES.map(s=>`<option ${s===r.status?'selected':''}>${s}</option>`).join('')}</select></td>
+        ${RTM_STATUSES.map(s=>`<option value="${s}" ${s===r.status?'selected':''}>${s}</option>`).join('')}</select></td>
      <td><input type="text" class="rtm-notes" data-id="${esc(r.id)}" value="${esc(r.notes).replace(/"/g,'&quot;')}"
           style="width:100%;font-size:11px;padding:5px"></td>
      <td>${cite(r)}${evid(r)}</td>

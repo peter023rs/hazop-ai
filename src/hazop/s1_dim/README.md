@@ -20,6 +20,7 @@ rationale and a file-by-file code guide live in `hazop_L1(Extraction)/DESIGN.md`
 | 6 | `assemble_graph.py` | typed topology graph; `orient_runs()` seeds flow direction from arrows, check valves, **PSV orientation** (equipment semantics: angle valve drawn spring-up, inlet below, outlet horizontal — flow is always inlet→valve→outlet) and 至/自 connector text, propagates conservatively, applies flow conservation at junctions — and **never guesses** across a real branch (disagreements become `direction_conflict`, not overwrites) |
 | 7 | `export_dexpi.py`, `export_pydexpi_native.py` | DEXPI-aligned plant model — the Stage 1 → Stage 2 contract (`plant_model_dexpi.json`: per-segment `flowDirection` + source, real valve `componentClass`) |
 | — | `pipeline.py` | orchestrates 0–7 on any PDF (`hazop-l1` CLI) |
+| — | `diagex_fallback.py` | LLM-vision fallback for documents the compat gate refuses (see below) |
 | — | `app.py`, `build_viewer.py` | validation website: upload → pipeline → interactive accept/reject overlay viewer |
 | — | `extract_page_spike.py` | early exploration spike, kept for reference |
 
@@ -48,6 +49,39 @@ python -m hazop.s1_dim.app        # http://127.0.0.1:8777
 The pre-digitized 2401 outputs (plant model + per-page topology/overlays)
 ship with the repo under `data/l1_output/` — the dashboard and Stage 2 read
 from there, so you only need to run the pipeline for *new* drawings.
+
+## LLM-vision fallback for incompatible documents (`diagex_fallback.py`)
+
+Documents the compat gate marks **unsupported** (scans/raster pages, no
+text layer, foreign drawing conventions) are no longer refused outright.
+When available, the pipeline routes them through
+[DiagEx](https://github.com/) — ABB Research's zero-shot P&ID
+vision-language agent (Apache-2.0; local checkout at `~/Desktop/DiagEx-Repro`)
+— and converts its reconciled graph into the same `topology_page<N>.json`
+contract, so the viewer, `export_dexpi` and Stage 2 consume it unchanged.
+Runs report `engine: "diagex"`; agent transcripts and the native DEXPI 2.0
+export persist under the run's `diagex_runs/` for auditing.
+
+Enable with:
+
+```bash
+.venv/bin/pip install -e ~/Desktop/DiagEx-Repro   # already done in this venv
+export ANTHROPIC_API_KEY=...                       # or OpenRouter/Kimi per DiagEx docs
+export HAZOP_DIAGEX_EFFORT=medium                  # low|medium|high|xhigh
+```
+
+Without the package or key, unsupported documents are refused with the
+original compat error — the deterministic path is unaffected either way.
+
+Honesty rules carry over: nodes keep the agent's per-entity confidence;
+flow direction is seeded **only** from off-page-connector direction
+attributes the agent read off the drawing, then run through the same
+`orient_runs()` propagation/conservation as the deterministic path (the
+2401-specific PSV-orientation seed is disabled — a document in this path
+by definition doesn't follow that convention). Directions are therefore
+sparser than on the deterministic path, and that is shown, not hidden
+(`direction_stats` per page, conversion drops counted in
+`output/diagex_report.json`).
 
 ## Known residuals (flagged, not hidden)
 

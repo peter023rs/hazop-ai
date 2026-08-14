@@ -6,6 +6,13 @@ run(pdf_path, run_dir, pages_spec) executes the full chain in run_dir:
 producing run_dir/output/{*_index.json, graph_page*.json, topology_page*.json,
 viewer.html}.
 
+Documents the compat gate marks "unsupported" (scans, missing text layer,
+foreign conventions) are no longer refused outright: when the DiagEx
+LLM-vision fallback is available (see diagex_fallback.py) they are routed
+through it instead, producing the same topology_page<N>.json contract with
+engine="diagex" provenance. Without diagex installed + a provider key the
+gate still refuses, exactly as before.
+
 pages_spec: "all" (default) or e.g. "4-12" / "2,5,7-9". Legend sheets add
 noise, so exclude them when you know which pages they are.
 """
@@ -24,6 +31,7 @@ from . import assemble_graph as AG
 from . import build_viewer as BV
 from . import normalize_pdf as NP
 from . import compat_check as CC
+from . import diagex_fallback as DF
 
 
 def parse_pages(spec, npages):
@@ -61,15 +69,39 @@ def run(pdf_path, run_dir, pages_spec="all"):
         doc = fitz.open(pdf_path)
         pages = parse_pages(pages_spec, len(doc))
 
-        # compatibility gate: refuse documents that violate the pipeline's
-        # hard requirements instead of emitting silently wrong topology
+        # compatibility gate: documents that violate the deterministic
+        # pipeline's hard requirements are routed to the DiagEx LLM-vision
+        # fallback rather than producing silently wrong topology; if the
+        # fallback is unavailable they are refused, exactly as before
         compat = CC.check(doc, norm_report)
         with open("output/compat_report.json", "w") as f:
             json.dump(compat, f, indent=1)
         if compat["verdict"] == "unsupported":
             fails = "; ".join(c["detail"] for c in compat["checks"]
                               if c["level"] == "fail")
-            raise ValueError(f"document incompatible with this pipeline: {fails}")
+            ok, why = DF.availability()
+            if not ok:
+                raise ValueError(
+                    f"document incompatible with this pipeline: {fails}. "
+                    f"DiagEx LLM-vision fallback unavailable: {why}")
+            summary = DF.run_fallback(pdf_path, doc, pages)
+            BV.PDF_PATH = pdf_path
+            BV.PROCESS_PAGES = pages
+            BV.build()
+            return {
+                "pages": pages,
+                "engine": "diagex",
+                "instruments": summary["counts"]["instruments"],
+                "valves": summary["counts"]["valves"],
+                "arrows": 0,
+                "equipment_capsules": summary["counts"]["equipment"],
+                "equipment_tags": 0,
+                "calibration": {k: norm_report[k] for k in
+                                ("scale", "method", "normalized")},
+                "compatibility": compat["verdict"],
+                "diagex": summary["diagex"],
+                "conversion": summary["conversion"],
+            }
 
         instruments = []
         for p in pages:
@@ -126,6 +158,7 @@ def run(pdf_path, run_dir, pages_spec="all"):
 
         return {
             "pages": pages,
+            "engine": "deterministic",
             "instruments": sum(1 for r in instruments
                                if r["class"] == "instrument"),
             "valves": len(valves),

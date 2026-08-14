@@ -23,6 +23,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
+from hazop.authgate import install_password_gate
 from hazop.s4_kb import KBRetriever, as_l3_retriever
 from hazop.s2_pml import (GraphQuery, QueryError, build_equipment_graph,
                           load_plant_model, query_examples, run_cypher,
@@ -60,6 +61,7 @@ L1_OUT = DATA_DIR / "l1_output"
 CORPUS_DIR = DATA_DIR / "corpus"
 
 app = Flask(__name__)
+install_password_gate(app)          # no-op unless HAZOP_WEB_PASSWORD is set
 
 PAGES = list(range(4, 13))          # process sheets of the 2401 drawing
 
@@ -146,7 +148,10 @@ def _port_open(port: int) -> bool:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # HAZOP_DIM_URL lets a tunnel wrapper point the validator link at the
+    # validator's public URL instead of the reviewer's own localhost.
+    dim_url = os.environ.get("HAZOP_DIM_URL", "http://127.0.0.1:8777")
+    return render_template("index.html", dim_url=dim_url)
 
 
 # --------------------------------------------------------------------------

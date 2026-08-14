@@ -28,6 +28,7 @@ dev = ["pytest>=7.0"]
 [project.scripts]
 hazop-l1     = "hazop.s1_dim.pipeline:_cli"
 hazop-web    = "hazop.s5_sw.app:main"
+hazop-dim    = "hazop.s1_dim.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

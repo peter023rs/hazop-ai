@@ -12,13 +12,18 @@ import time
 from flask import (Flask, redirect, render_template_string, request,
                    send_file, url_for)
 
+from hazop.authgate import install_password_gate
 from hazop.s1_dim.pipeline import run as run_pipeline
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-RUNS = os.path.join(BASE, "runs")
+# HAZOP_DIM_RUNS points the validator at an existing review history — e.g. the
+# runs/ tree left behind in hazop_L1(Extraction) — instead of starting empty.
+RUNS = os.path.abspath(os.environ.get("HAZOP_DIM_RUNS",
+                                      os.path.join(BASE, "runs")))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 80 * 1024 * 1024
+install_password_gate(app)          # no-op unless HAZOP_WEB_PASSWORD is set
 
 INDEX_HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>HAZOP L1 - P&ID Topology Extractor</title>
@@ -59,6 +64,83 @@ INDEX_HTML = """<!DOCTYPE html>
    {% if r.verdict %}<span style="color:{{r.vcolor}}">&#9679; {{r.verdict}}</span> &nbsp;{% endif %}
    {{r.when}}</span></div>
 {% else %}<p class="note">None yet.</p>{% endfor %}
+<script>
+/* 中文/English toggle — same walker approach as the dashboard's i18n.js,
+   trimmed to this page's strings.  English DOM is the source of truth. */
+(function () {
+  'use strict';
+  const EXACT = {
+    'HAZOP L1 - P&ID Topology Extractor': 'HAZOP L1 - P&ID 拓扑提取器',
+    'P&ID Topology Extractor': 'P&ID 拓扑提取器',
+    'Stage 1 validator': '第 1 阶段校验器',
+    'Vector P&ID PDF (same drawing convention as the 2401 unit set)':
+      '矢量 P&ID PDF（与 2401 装置图集同一绘图规范）',
+    'Pages to process ("all", or e.g. "4-12")':
+      '处理页码（"all" 表示全部，或如 "4-12"）',
+    'Extract topology': '提取拓扑',
+    'Extraction runs the deterministic pipeline: instrument bubbles → valves → line tracing → equipment → assembled topology graph, then opens an interactive overlay viewer. Legend sheets add noise — exclude them via the pages field if you know where they are.':
+      '提取将运行确定性流水线：仪表符号 → 阀门 → 管线追踪 → 设备 → 组装拓扑图，完成后打开交互式叠加查看器。图例页会引入噪声 — 若已知其页码，请通过页码栏排除。',
+    'Previous extractions': '历史提取记录',
+    'None yet.': '暂无。',
+  };
+  const PATTERNS = [
+    [/^● (compatible|degraded|unsupported)$/,
+     (m, v) => '● ' + ({compatible: '兼容', degraded: '部分兼容',
+                        unsupported: '不兼容'}[v])],
+  ];
+  const norm = s => s.trim().replace(/\s+/g, ' ');
+  const orig = new WeakMap();
+  const TITLE_EN = document.title;
+  let lang = localStorage.getItem('hazop-lang');
+  if (lang !== 'zh' && lang !== 'en') {
+    lang = (navigator.language || '').toLowerCase().startsWith('zh')
+      ? 'zh' : 'en';
+  }
+  function zhOf(raw) {
+    const key = norm(raw);
+    if (!key) return null;
+    if (EXACT[key] !== undefined) {
+      return raw.match(/^\s*/)[0] + EXACT[key] + raw.match(/\s*$/)[0];
+    }
+    let s = raw, hit = false;
+    for (const [re, rep] of PATTERNS) {
+      const t = s.replace(re, rep);
+      if (t !== s) { s = t; hit = true; }
+    }
+    return hit ? s : null;
+  }
+  function walkAll() {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let t;
+    while ((t = w.nextNode())) {
+      const p = t.parentElement;
+      if (!p || p.closest('script,style,code,pre')) continue;
+      if (lang === 'zh') {
+        const raw = orig.has(t) ? orig.get(t) : t.nodeValue;
+        const out = zhOf(raw);
+        if (out !== null) {
+          if (!orig.has(t)) orig.set(t, raw);
+          t.nodeValue = out;
+        }
+      } else if (orig.has(t)) {
+        t.nodeValue = orig.get(t);
+      }
+    }
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = lang === 'zh'
+      ? (EXACT[norm(TITLE_EN)] || TITLE_EN) : TITLE_EN;
+    btn.textContent = lang === 'zh' ? 'EN' : '中文';
+  }
+  const btn = document.createElement('button');
+  btn.style.cssText = 'position:fixed;top:14px;right:18px;background:#1a1a20;' +
+    'border:1px solid #3a3a44;color:#4fc3f7;border-radius:6px;' +
+    'padding:6px 14px;cursor:pointer;font-size:13px';
+  btn.onclick = () => { lang = lang === 'zh' ? 'en' : 'zh';
+    localStorage.setItem('hazop-lang', lang); walkAll(); };
+  document.body.appendChild(btn);
+  walkAll();
+})();
+</script>
 </body></html>"""
 
 
@@ -116,11 +198,27 @@ def upload():
     return redirect(url_for("view", slug=slug))
 
 
+def _run_dir(slug):
+    """Resolve a run directory, or None if `slug` escapes runs/.
+
+    The charset check alone is not enough: "." and ".." are made entirely of
+    permitted characters, so a bare ".." would resolve one level above runs/.
+    """
+    if not re.fullmatch(r"[\w.一-鿿-]+", slug):
+        return None
+    run_dir = os.path.realpath(os.path.join(RUNS, slug))
+    if os.path.commonpath([run_dir, os.path.realpath(RUNS)]) != \
+            os.path.realpath(RUNS) or run_dir == os.path.realpath(RUNS):
+        return None
+    return run_dir
+
+
 @app.get("/view/<slug>")
 def view(slug):
-    if not re.fullmatch(r"[\w.一-鿿-]+", slug):
+    run_dir = _run_dir(slug)
+    if run_dir is None:
         return "bad run id", 400
-    viewer = os.path.join(RUNS, slug, "output", "viewer.html")
+    viewer = os.path.join(run_dir, "output", "viewer.html")
     if not os.path.exists(viewer):
         return "run not found", 404
     return send_file(viewer)
@@ -128,9 +226,10 @@ def view(slug):
 
 @app.get("/labels/<slug>")
 def get_labels(slug):
-    if not re.fullmatch(r"[\w.一-鿿-]+", slug):
+    run_dir = _run_dir(slug)
+    if run_dir is None:
         return "bad run id", 400
-    path = os.path.join(RUNS, slug, "labels.json")
+    path = os.path.join(run_dir, "labels.json")
     if not os.path.exists(path):
         return {}
     return send_file(path, mimetype="application/json")
@@ -138,20 +237,28 @@ def get_labels(slug):
 
 @app.post("/labels/<slug>")
 def post_labels(slug):
-    if not re.fullmatch(r"[\w.一-鿿-]+", slug):
+    run_dir = _run_dir(slug)
+    if run_dir is None:
         return "bad run id", 400
-    if not os.path.isdir(os.path.join(RUNS, slug)):
+    if not os.path.isdir(run_dir):
         return "run not found", 404
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return "expected JSON object", 400
     import json as _json
-    with open(os.path.join(RUNS, slug, "labels.json"), "w",
+    with open(os.path.join(run_dir, "labels.json"), "w",
               encoding="utf-8") as f:
         _json.dump(data, f, ensure_ascii=False, indent=1)
     return {"ok": True, "count": len(data)}
 
 
-if __name__ == "__main__":
+def main():
+    host = os.environ.get("HAZOP_DIM_HOST", "127.0.0.1")
+    port = int(os.environ.get("HAZOP_DIM_PORT", "8777"))
     os.makedirs(RUNS, exist_ok=True)
-    app.run(host="127.0.0.1", port=8777, debug=False)
+    print(f"ready — open http://127.0.0.1:{port}")
+    app.run(host=host, port=port, debug=False)
+
+
+if __name__ == "__main__":
+    main()
