@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-End-to-end pipeline turning a P&ID drawing into an AI-assisted HAZOP worksheet, as one installable Python package (`hazop`, src/ layout) with one subpackage per subsystem ("stage") of the requirements doc's §2.1 architecture. Each stage has its own README (`src/hazop/s*/README.md`) with design rationale, current numbers, and known limitations — read the relevant one before changing a stage.
+End-to-end pipeline turning a P&ID drawing into an AI-assisted HAZOP worksheet, as one installable Python package (`hazop`, src/ layout) with one subpackage per subsystem ("stage") of the requirements doc's §2.1 architecture. Most stages have their own README — see Architecture below.
 
 ## Commands
 
@@ -38,22 +38,18 @@ Run modules with `python -m hazop.<subsystem>.<module>`; imports are always abso
 
 ## Architecture
 
-Data flows stage to stage through explicit file/schema contracts, not imports of each other's internals:
+See `README.md` for the full software design and the stage-by-stage pipeline.
 
-```
-P&ID PDF ──s1_dim──► data/l1_output/plant_model_dexpi.json   (DEXPI-aligned, per-segment flowDirection)
-             │            │
-             │       s2_pml/adapter.py contracts ~3k geometric segments → 428-node equipment graph
-             │            │
-             │       s2_pml (nodes.py HAZOP-node proposal, screening.py, condense.py, query.py NL→Cypher)
-             │            │
-             │            ▼  TopologyGraph contract (s3_are/reasoner/schema.py)
-data/corpus/ ──s4_kb──► hybrid retriever ──► s3_are AIReasoner ──► worksheet rows + audit records
-                                                  │
-s5_sw dashboard (:8780) serves all of it live;  mdl/ is the §4 eval harness that measures the ARE
-```
+Per-stage design rationale, current numbers, and honest limitations — read the
+relevant one before changing a stage:
 
-- **s1_dim** — deterministic geometry-only extraction (no ML/OCR); `diagex_fallback.py` is an LLM-vision fallback only for documents the compat gate refuses (enabled by `pip install -e ~/Desktop/DiagEx-Repro` + `ANTHROPIC_API_KEY`; tune with `HAZOP_DIAGEX_EFFORT=low|medium|high|xhigh`; without it, incompatible documents are refused and the deterministic path is unaffected). **s2_pml** — equipment graph, node proposal, deviation screening, NL/Cypher query layer. **s3_are** — guideword×parameter reasoning with a two-stage critic (tag-grounding gate, then evidence check). **s4_kb** — curated corpus + hybrid BM25/dense retrieval with curation and gold-holdout gates. **s5_sw** — Flask dashboard tying it together, incl. the LLM Lab. **s6_rcm** — requirements traceability matrix. **s7_agm** — placeholder. **mdl** — not a stage: gold-set eval, grounding/fabrication/latency/seeded-omission gates.
+- `src/hazop/s1_dim/README.md` — stage 1, deterministic rule-based topology extraction from vector P&ID PDFs (no ML, no OCR; every detection traceable to drawing primitives)
+- `src/hazop/s2_pml/README.md` — stage 2, process model layer: directed process graph, HAZOP node proposal, screening; Neo4j and simulator behind seams
+- `src/hazop/s3_are/README.md` — stage 3, AI reasoner: guideword x parameter deviations, retrieval-grounded LLM findings, tag-grounding gate, worksheet rows
+- `src/hazop/s4_kb/README.md` — stage 4, knowledge base: curated corpus, hybrid BM25+dense retrieval, curation gates
+- `src/hazop/s5_sw/README.md` — stage 5, integrated dashboard over all stages, plus LLM Lab multi-device benchmarking
+
+`s6_rcm` (requirements traceability, `rtm.py`) and `s7_agm` (stub) have no README yet.
 
 ### The seam pattern (load-bearing)
 
@@ -78,3 +74,5 @@ Uncertainty is surfaced, never papered over — this shapes APIs and data format
 - `data/` ships the digitized 2401-unit outputs (`l1_output/` — legacy name kept for artifact compatibility) and the seed KB corpus; dashboard and tests read from it. Override root with `HAZOP_DATA`. Keep freshly generated run artifacts out of git.
 - Web config: `HAZOP_HOST`, `HAZOP_PORT`; `HAZOP_WEB_PASSWORD` arms the optional Basic-auth gate (`hazop/authgate.py`), used by `share.sh` when tunneling the dashboard publicly. `HAZOP_DIM_RUNS` points the stage-1 validator at an alternate runs directory (share.sh defaults it to the legacy pre-consolidation tree if present).
 - LLM Lab: `data/llm_lab/llm_lab.yaml` is the single source of truth for the device×model matrix (the UI renders it, never edits it); `runs.jsonl` is gitignored and device-local.
+
+
